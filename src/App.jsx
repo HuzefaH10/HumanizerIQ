@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Wand2, ScanSearch, Type, Copy, Check, Trash2,
   ArrowLeft, AlertCircle, FileText, Sparkles, ChevronRight
 } from 'lucide-react'
+import { runDetection } from './detector'
+import { runHumanizer } from './humanizer'
 
-const API_KEY = 'YOUR_KEY_HERE'
-const API_URL = 'https://api.anthropic.com/v1/messages'
 const MAX_WORDS = 2500
 
 const HIGHLIGHT_COLORS = {
@@ -23,60 +23,6 @@ const LEGEND_ITEMS = [
   { key: 'formal', label: 'Formal / Zero Contractions', color: '#3a2800' },
   { key: 'high-confidence', label: 'High-Confidence AI', color: '#3a1a1a' },
 ]
-
-const DETECT_SYSTEM_PROMPT = `You are an AI text detection engine. Analyze the given text and return ONLY a JSON object, no other text, no markdown, no backticks.
-
-Detect these pattern categories and flag exact spans:
-
-CATEGORY A - "transition" (navy): phrases like "Furthermore", "Moreover", "Additionally", "In conclusion", "It's worth noting", "It's important to", "It is crucial to", "It's essential to", "Notably"
-
-CATEGORY B - "rhythm" (green): identify 3+ consecutive sentences of near-identical length (within 5 words of each other). Flag the whole block.
-
-CATEGORY C - "vocab" (purple): words/phrases: "delve", "tapestry", "nuanced", "multifaceted", "comprehensive", "robust", "leverage", "paradigm", "underscore", "pivotal", "realm", "revolutionize", "bustling", "intricate", "commendable", "meticulous", "shed light", "it is worth", "in today's", "in the realm", "stands as", "serves as"
-
-CATEGORY D - "formal" (amber): zero-contraction zones (3+ sentences with no contractions where contractions would be natural), overly formal synonyms (utilize→use, commence→start, endeavor→try, facilitate→help)
-
-CATEGORY E - "high-confidence" (red): sentences containing 3+ signals from any category combined
-
-Return this exact JSON structure:
-{
-  "score": <0-100 integer, overall AI probability>,
-  "verdict": "<one line verdict>",
-  "spans": [
-    {
-      "text": "<exact text from input>",
-      "category": "<transition|rhythm|vocab|formal|high-confidence>",
-      "reason": "<one line explanation>"
-    }
-  ],
-  "summary": {
-    "transition_count": <int>,
-    "rhythm_count": <int>,
-    "vocab_count": <int>,
-    "formal_count": <int>,
-    "high_confidence_count": <int>
-  }
-}`
-
-function buildHumanizePrompt(style, difficulty) {
-  return `You are an expert text humanizer. Your job is to rewrite AI-generated text so it reads as naturally human-written. 
-
-STYLE: ${style} (Academic = formal but natural | Professional = business casual, direct | Casual = conversational, fragments ok)
-DIFFICULTY: ${difficulty} (Easy = light touch | Medium = restructure sentences | Hard = full rewrite, inject human quirks)
-
-RULES — always apply:
-1. Break sentence length uniformity — vary short and long deliberately
-2. Remove ALL of these words: delve, tapestry, nuanced, multifaceted, comprehensive (when used as filler), robust, leverage (metaphorical), paradigm, underscore (verb), pivotal, realm, revolutionize, bustling, intricate, commendable, meticulous, shed light
-3. Replace transition phrases: "Furthermore"→"Also" or cut entirely, "Moreover"→"And", "Additionally"→"Plus" or restructure, "In conclusion"→cut or "So"
-4. Add contractions where natural (do not→don't, it is→it's, they are→they're)
-5. Remove hedging openers: "It's worth noting that", "It's important to", "It is crucial to" — just say the thing directly
-6. Break perfect paragraph symmetry — one para can be 2 sentences, next can be 6
-7. EASY only: steps 1-4 above
-8. MEDIUM: all above + restructure at least 40% of sentences, change word order, split or merge sentences
-9. HARD: all above + add one intentional fragment per 200 words, allow a rhetorical question, inject mild informal phrasing even in Academic mode, ensure no two consecutive sentences have same structure
-
-Return ONLY the rewritten text. No preamble, no explanation, no "Here is the rewritten version".`
-}
 
 function countWords(text) {
   if (!text.trim()) return 0
@@ -149,7 +95,7 @@ function getScoreColor(score) {
 }
 
 export default function App() {
-  const [mode, setMode] = useState('humanize') // 'humanize' | 'detect'
+  const [mode, setMode] = useState('humanize')
   const [inputText, setInputText] = useState('')
   const [style, setStyle] = useState('Professional')
   const [difficulty, setDifficulty] = useState('Medium')
@@ -160,7 +106,7 @@ export default function App() {
   const [humanizedText, setHumanizedText] = useState('')
 
   // Detect output
-  const [detectResult, setDetectResult] = useState(null) // { score, verdict, spans, summary, highlightedHtml }
+  const [detectResult, setDetectResult] = useState(null)
 
   const [copied, setCopied] = useState(false)
 
@@ -181,68 +127,42 @@ export default function App() {
     }
   }, [mode])
 
-  const callClaude = useCallback(async (systemPrompt, userContent) => {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userContent }],
-      }),
-    })
-
-    if (!response.ok) {
-      const errBody = await response.text()
-      throw new Error(`API error ${response.status}: ${errBody}`)
-    }
-
-    const data = await response.json()
-    return data.content[0].text
-  }, [])
-
-  const handleHumanize = async () => {
+  const handleHumanize = () => {
     if (!inputText.trim() || overLimit) return
     setLoading(true)
     setError(null)
     setHumanizedText('')
-    try {
-      const systemPrompt = buildHumanizePrompt(style, difficulty)
-      const result = await callClaude(systemPrompt, inputText)
-      setHumanizedText(result)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+
+    // Use setTimeout to let the UI show loading state before heavy computation
+    setTimeout(() => {
+      try {
+        const result = runHumanizer(inputText, style, difficulty)
+        setHumanizedText(result)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }, 80)
   }
 
-  const handleDetect = async () => {
+  const handleDetect = () => {
     if (!inputText.trim() || overLimit) return
     setLoading(true)
     setError(null)
     setDetectResult(null)
-    try {
-      const result = await callClaude(DETECT_SYSTEM_PROMPT, inputText)
-      // Parse JSON response — strip any markdown if present
-      let cleaned = result.trim()
-      if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+
+    setTimeout(() => {
+      try {
+        const result = runDetection(inputText)
+        const highlightedHtml = highlightSpans(inputText, result.spans)
+        setDetectResult({ ...result, highlightedHtml })
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
       }
-      const parsed = JSON.parse(cleaned)
-      const highlightedHtml = highlightSpans(inputText, parsed.spans)
-      setDetectResult({ ...parsed, highlightedHtml })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    }, 80)
   }
 
   const handleCopy = () => {
