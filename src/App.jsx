@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Wand2, ScanSearch, Type, Copy, Check, Trash2,
-  ArrowLeft, AlertCircle, FileText, Sparkles, ChevronRight
+  ArrowLeft, AlertCircle, FileText, Sparkles, ChevronRight,
+  Info
 } from 'lucide-react'
 import { runDetection } from './detector'
 import { runHumanizer } from './humanizer'
@@ -104,6 +105,7 @@ export default function App() {
 
   // Humanize output
   const [humanizedText, setHumanizedText] = useState('')
+  const [humanizeNote, setHumanizeNote] = useState(null) // { type: 'note'|'warning', text }
 
   // Detect output
   const [detectResult, setDetectResult] = useState(null)
@@ -132,12 +134,18 @@ export default function App() {
     setLoading(true)
     setError(null)
     setHumanizedText('')
+    setHumanizeNote(null)
 
     // Use setTimeout to let the UI show loading state before heavy computation
     setTimeout(() => {
       try {
-        const result = runHumanizer(inputText, style, difficulty)
+        const { result, note, warning } = runHumanizer(inputText, style, difficulty)
         setHumanizedText(result)
+        if (warning) {
+          setHumanizeNote({ type: 'warning', text: warning })
+        } else if (note) {
+          setHumanizeNote({ type: 'note', text: note })
+        }
       } catch (err) {
         setError(err.message)
       } finally {
@@ -166,11 +174,12 @@ export default function App() {
   }
 
   const handleCopy = () => {
-    const textToCopy = mode === 'humanize'
-      ? humanizedText
-      : detectResult
-        ? `AI Score: ${detectResult.score}%\n${detectResult.verdict}`
-        : ''
+    let textToCopy = ''
+    if (mode === 'humanize') {
+      textToCopy = humanizedText
+    } else if (detectResult) {
+      textToCopy = `AI Score: ${detectResult.score}%\n${detectResult.verdict}`
+    }
     if (!textToCopy) return
     navigator.clipboard.writeText(textToCopy).then(() => {
       setCopied(true)
@@ -253,7 +262,7 @@ export default function App() {
                 {words.toLocaleString()} / {MAX_WORDS.toLocaleString()} words
               </span>
               {inputText && (
-                <button className="clear-btn" onClick={() => { setInputText(''); setError(null); setHumanizedText(''); setDetectResult(null) }}>
+                <button className="clear-btn" onClick={() => { setInputText(''); setError(null); setHumanizedText(''); setHumanizeNote(null); setDetectResult(null) }}>
                   <Trash2 size={12} />
                   Clear
                 </button>
@@ -346,7 +355,15 @@ export default function App() {
             {/* HUMANIZE OUTPUT */}
             {mode === 'humanize' && (
               humanizedText ? (
-                <div className="output-text">{humanizedText}</div>
+                <>
+                  {humanizeNote && (
+                    <div className={humanizeNote.type === 'warning' ? 'warning-banner' : 'info-banner'}>
+                      <Info size={16} />
+                      {humanizeNote.text}
+                    </div>
+                  )}
+                  <div className="output-text">{humanizedText}</div>
+                </>
               ) : (
                 !loading && !error && (
                   <div className="output-placeholder">
