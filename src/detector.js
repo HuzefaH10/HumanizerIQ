@@ -274,6 +274,17 @@ export function runDetection(text){
   const seen=new Set(),spans=[]
   allSpans.forEach(s=>{const k=s.text.trim();if(!seen.has(k)){seen.add(k);spans.push({text:s.text,category:s.type,reason:s.reason})}})
 
+  const sentencesData = p.sentences.map(s => {
+    const t = s.trim();
+    const hits = new Set();
+    allSpans.forEach(span => {
+      if (t.includes(span.text) || span.text.includes(t)) hits.add(span.reason);
+    });
+    const rawScore = Array.from(hits).length * 25;
+    const conf = Math.min(rawScore, 100);
+    return { text: s, confidence: conf, reasons: Array.from(hits) };
+  });
+
   const summary={
     transition_count:r.m2.flagged.length+r.m7.flagged.length,
     rhythm_count:r.m3.flagged.length+r.m9.flagged.length,
@@ -305,5 +316,5 @@ export function runDetection(text){
   else if(finalScore<80){verdict='Likely AI Generated';color='#f97316'}
   else{verdict='Almost Certainly AI Generated';color='#ef4444'}
 
-  return{score:finalScore,verdict,color,spans,summary,subscores:sub}
+  return{score:finalScore,verdict,color,spans,summary,subscores:sub,sentencesData}
 }

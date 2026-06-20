@@ -38,6 +38,29 @@ function highlightSpans(text,spans){
 
 function getScoreColor(s){if(s<30)return'green';if(s<60)return'yellow';if(s<80)return'orange';return'red'}
 
+function generateSentenceHtml(text, sentencesData) {
+  if(!sentencesData||!sentencesData.length)return escHtml(text)
+  const positions=[]
+  sentencesData.forEach(sd=>{
+    let idx=0
+    while(true){const i=text.indexOf(sd.text,idx);if(i===-1)break
+      let color='#22c55e';if(sd.confidence>=80)color='#ef4444';else if(sd.confidence>=60)color='#f97316';else if(sd.confidence>=30)color='#eab308'
+      const reasonsList=sd.reasons.length>0?sd.reasons.join(', '):'None'
+      const tooltip=`AI Confidence: ${sd.confidence}% — [${reasonsList}]`
+      positions.push({start:i,end:i+sd.text.length,color,tooltip});idx=i+1}
+  })
+  positions.sort((a,b)=>a.start-b.start||b.end-a.end)
+  const filtered=[];let lastEnd=-1
+  positions.forEach(p=>{if(p.start>=lastEnd){filtered.push(p);lastEnd=p.end}})
+  let result='',cursor=0
+  filtered.forEach(p=>{
+    if(p.start>cursor)result+=escHtml(text.slice(cursor,p.start))
+    result+=`<span style="border-left: 3px solid ${p.color}; padding-left: 4px; margin-left: 2px;" title="${escHtml(p.tooltip)}">${escHtml(text.slice(p.start,p.end))}</span>`
+    cursor=p.end})
+  if(cursor<text.length)result+=escHtml(text.slice(cursor))
+  return result
+}
+
 // Animated counter hook
 function useAnimatedCounter(target,duration=600){
   const[display,setDisplay]=useState(0)
@@ -68,6 +91,7 @@ export default function App(){
     try{const h=sessionStorage.getItem('humanizer_history');return h?JSON.parse(h):[]}catch{return[]}
   })
   const[showHistory,setShowHistory]=useState(false)
+  const[detectView,setDetectView]=useState('category')
 
   useEffect(()=>{
     const handleClickOutside=(e)=>{
@@ -178,7 +202,8 @@ export default function App(){
     setTimeout(()=>{try{
       const result=runDetection(txt)
       const highlightedHtml=highlightSpans(txt,result.spans)
-      setDetectResult({...result,highlightedHtml})
+      const sentenceHtml=generateSentenceHtml(txt,result.sentencesData)
+      setDetectResult({...result,highlightedHtml,sentenceHtml})
     }catch(e){setError(e.message)}finally{setLoading(false)}},0)
   },[inputText])
 
@@ -354,9 +379,16 @@ export default function App(){
               <div className="summary-chip"><span className="summary-chip-count">{detectResult.summary.formal_count}</span><span className="summary-chip-label">Formal</span></div>
               <div className="summary-chip"><span className="summary-chip-count">{detectResult.summary.high_confidence_count}</span><span className="summary-chip-label">High Conf.</span></div>
             </div>}
-            {detectResult.highlightedHtml&&<div className="output-text" dangerouslySetInnerHTML={{__html:detectResult.highlightedHtml}}/>}
-            <div className="legend">{LEGEND_ITEMS.filter(item=>activeCategories.has(item.key)).map(item=>
-              <span key={item.key} className="legend-pill"><span className="legend-dot" style={{background:item.color}}/>{item.label}</span>)}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+              <div className="pill-tabs">
+                <button className={`pill-tab ${detectView==='category'?'active':''}`} onClick={()=>setDetectView('category')}>Category View</button>
+                <button className={`pill-tab ${detectView==='sentence'?'active':''}`} onClick={()=>setDetectView('sentence')}>Sentence View</button>
+              </div>
+            </div>
+            {detectResult.highlightedHtml&&detectView==='category'&&<div className="output-text" dangerouslySetInnerHTML={{__html:detectResult.highlightedHtml.replace(/\n\n/g,'<br><br>')}}/>}
+            {detectResult.sentenceHtml&&detectView==='sentence'&&<div className="output-text" dangerouslySetInnerHTML={{__html:detectResult.sentenceHtml.replace(/\n\n/g,'<br><br>')}}/>}
+            {detectView==='category'&&<div className="legend">{LEGEND_ITEMS.filter(item=>activeCategories.has(item.key)).map(item=>
+              <span key={item.key} className="legend-pill"><span className="legend-dot" style={{background:item.color}}/>{item.label}</span>)}</div>}
           </div>:!loading&&!error&&<div className="output-placeholder"><ScanSearch size={48}/>
             <p>Paste any text on the left,<br/>then click <strong>Analyze</strong> to detect<br/>AI-generated patterns.</p></div>)}
 
