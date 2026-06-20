@@ -1,5 +1,5 @@
 import{useState,useRef,useEffect,useCallback}from'react'
-import{Wand2,ScanSearch,Type,Copy,Check,Trash2,ArrowLeft,AlertCircle,FileText,Sparkles,ChevronRight,Info,Clock}from'lucide-react'
+import{Wand2,ScanSearch,Type,Copy,Check,Trash2,ArrowLeft,AlertCircle,FileText,Sparkles,ChevronRight,Info,Clock,RefreshCw}from'lucide-react'
 import{runDetection}from'./detector'
 import{runHumanizer}from'./humanizer'
 import{HIGHLIGHT_COLORS}from'./engine-data'
@@ -87,11 +87,24 @@ export default function App(){
   const[detectResult,setDetectResult]=useState(null)
   const[copied,setCopied]=useState(false)
   const[outputWords,setOutputWords]=useState(0)
+  const[loadingType,setLoadingType]=useState(null)
+  const[loadingMsgIdx,setLoadingMsgIdx]=useState(0)
+  const[progress,setProgress]=useState(0)
   const[history,setHistory]=useState(()=>{
     try{const h=sessionStorage.getItem('humanizer_history');return h?JSON.parse(h):[]}catch{return[]}
   })
   const[showHistory,setShowHistory]=useState(false)
   const[detectView,setDetectView]=useState('category')
+
+  const humanizeMsgs=["Analyzing patterns...","Removing AI fingerprints...","Injecting human variance...","Finalizing output..."]
+  const detectMsgs=["Scanning structure...","Measuring patterns...","Calculating score..."]
+
+  useEffect(()=>{
+    if(!loadingType)return
+    const msgs=loadingType==='humanize'?humanizeMsgs:detectMsgs
+    const id=setInterval(()=>setLoadingMsgIdx(c=>(c+1)%msgs.length),800)
+    return()=>clearInterval(id)
+  },[loadingType])
 
   useEffect(()=>{
     const handleClickOutside=(e)=>{
@@ -179,32 +192,42 @@ export default function App(){
   const handleHumanize=useCallback((overrideText = null)=>{
     const txt = typeof overrideText === 'string' ? overrideText : inputText;
     if(!txt.trim()||countWords(txt)>MAX_WORDS)return
-    setLoading(true);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0)
+    setLoading(true);setLoadingType('humanize');setLoadingMsgIdx(0);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0);setProgress(0);
+    setTimeout(() => setProgress(90), 50);
     setTimeout(()=>{try{
-      const{result,note,warning}=runHumanizer(txt,style,difficulty)
-      setHumanizedText(result)
-      setOutputWords(countWords(result))
-      const newEntry = { id: Date.now(), timestamp: Date.now(), inputText: txt, outputText: result, style, difficulty };
-      setHistory(prev => {
-        const next = [newEntry, ...prev].slice(0, 3);
-        sessionStorage.setItem('humanizer_history', JSON.stringify(next));
-        return next;
-      });
-      if(warning)setHumanizeNote({type:'warning',text:warning})
-      else if(note)setHumanizeNote({type:'note',text:note})
-    }catch(e){setError(e.message)}finally{setLoading(false)}},0)
+      setProgress(100);
+      setTimeout(()=>{
+        const{result,note,warning}=runHumanizer(txt,style,difficulty)
+        setHumanizedText(result)
+        setOutputWords(countWords(result))
+        const newEntry = { id: Date.now(), timestamp: Date.now(), inputText: txt, outputText: result, style, difficulty };
+        setHistory(prev => {
+          const next = [newEntry, ...prev].slice(0, 3);
+          sessionStorage.setItem('humanizer_history', JSON.stringify(next));
+          return next;
+        });
+        if(warning)setHumanizeNote({type:'warning',text:warning})
+        else if(note)setHumanizeNote({type:'note',text:note})
+        setLoading(false); setLoadingType(null);
+      }, 200)
+    }catch(e){setError(e.message);setLoading(false);setLoadingType(null)}},3200)
   },[inputText,style,difficulty])
 
   const handleDetect=useCallback((overrideText = null)=>{
     const txt = typeof overrideText === 'string' ? overrideText : inputText;
     if(!txt.trim()||countWords(txt)>MAX_WORDS)return
-    setLoading(true);setError(null);setDetectResult(null)
+    setLoading(true);setLoadingType('detect');setLoadingMsgIdx(0);setError(null);setDetectResult(null);setProgress(0);
+    setTimeout(() => setProgress(90), 50);
     setTimeout(()=>{try{
-      const result=runDetection(txt)
-      const highlightedHtml=highlightSpans(txt,result.spans)
-      const sentenceHtml=generateSentenceHtml(txt,result.sentencesData)
-      setDetectResult({...result,highlightedHtml,sentenceHtml})
-    }catch(e){setError(e.message)}finally{setLoading(false)}},0)
+      setProgress(100);
+      setTimeout(()=>{
+        const result=runDetection(txt)
+        const highlightedHtml=highlightSpans(txt,result.spans)
+        const sentenceHtml=generateSentenceHtml(txt,result.sentencesData)
+        setDetectResult({...result,highlightedHtml,sentenceHtml})
+        setLoading(false); setLoadingType(null);
+      }, 200)
+    }catch(e){setError(e.message);setLoading(false);setLoadingType(null)}},2400)
   },[inputText])
 
   const handleHumanizeAgain = () => {
@@ -275,14 +298,24 @@ export default function App(){
               <button key={d} className={`pill-tab ${difficulty===d?'active':''}`} onClick={()=>setDifficulty(d)}>{d}</button>)}</div></div>
         </>}
         {mode==='humanize'?
-          <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={handleHumanize}>
-            {loading?<span className="spinner"/>:<Sparkles size={18}/>}{loading?'Humanizing...':'Humanize'}</button>:
-          <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={handleDetect}>
-            {loading?<span className="spinner"/>:<ScanSearch size={18}/>}{loading?'Analyzing...':'Analyze'}</button>}
+          <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleHumanize(null)}>
+            {loading?<RefreshCw size={18} className="spin-icon"/>:<Sparkles size={18}/>}
+            {loading?(loadingType==='humanize'?humanizeMsgs[loadingMsgIdx]:'Humanizing...'):'Humanize'}
+          </button>:
+          <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleDetect(null)}>
+            {loading?<RefreshCw size={18} className="spin-icon"/>:<ScanSearch size={18}/>}
+            {loading?(loadingType==='detect'?detectMsgs[loadingMsgIdx]:'Analyzing...'):'Analyze'}
+          </button>}
       </div>
 
-      <div className="panel">
-        <div className="panel-header" style={{ position: 'relative' }}>
+      <div className="panel" style={{ position: 'relative' }}>
+        <div className="progress-bar-container" style={{ opacity: loading ? 1 : 0, transition: 'opacity 0.3s' }}>
+          <div className="progress-bar" style={{ 
+            width: `${progress}%`, 
+            transition: progress === 90 ? `width ${loadingType==='humanize'?'3.2s':'2.4s'} cubic-bezier(0.1, 0.7, 0.1, 1)` : progress === 100 ? 'width 0.2s ease-out' : 'none' 
+          }}/>
+        </div>
+        <div className="panel-header" style={{ position: 'relative', zIndex: 2 }}>
           <div className="panel-title"><FileText size={14}/>{mode==='humanize'?'Humanized Output':'Detection Results'}</div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {mode==='humanize' && (
