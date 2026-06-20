@@ -94,6 +94,7 @@ export default function App(){
     try{const h=sessionStorage.getItem('humanizer_history');return h?JSON.parse(h):[]}catch{return[]}
   })
   const[showHistory,setShowHistory]=useState(false)
+  const[showExport,setShowExport]=useState(false)
   const[detectView,setDetectView]=useState('category')
 
   const humanizeMsgs=["Analyzing patterns...","Removing AI fingerprints...","Injecting human variance...","Finalizing output..."]
@@ -109,10 +110,11 @@ export default function App(){
   useEffect(()=>{
     const handleClickOutside=(e)=>{
       if(!e.target.closest('.history-wrapper')) setShowHistory(false);
+      if(!e.target.closest('.export-wrapper')) setShowExport(false);
     };
-    if(showHistory) document.addEventListener('click',handleClickOutside);
+    if(showHistory||showExport) document.addEventListener('click',handleClickOutside);
     return()=>document.removeEventListener('click',handleClickOutside);
-  },[showHistory])
+  },[showHistory,showExport])
   
   const[formatState,setFormatState]=useState({
     bold:false,italic:false,underline:false,strikeThrough:false,
@@ -250,6 +252,34 @@ export default function App(){
     else if(detectResult)t=`AI Score: ${detectResult.score}%\n${detectResult.verdict}`
     if(!t)return;navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)})}
 
+  const handleExport = (type) => {
+    if (!outputRef.current) return;
+    const txt = outputRef.current.innerText;
+    const html = outputRef.current.innerHTML;
+    let blob;
+    
+    if (type === 'txt') {
+      blob = new Blob([txt], { type: 'text/plain' });
+    } else if (type === 'html') {
+      const docHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>HumanizerIQ Output</title><style>body{background:#111;color:#fff;font-family:sans-serif;line-height:1.6;max-width:800px;margin:0 auto;padding:40px;}</style></head><body>${html}</body></html>`;
+      blob = new Blob([docHtml], { type: 'text/html' });
+    } else if (type === 'doc') {
+      const escTxt = txt.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/\n/g, '\\par\n');
+      const rtf = `{\\rtf1\\ansi {\\fonttbl\\f0 Times New Roman;}\\f0\\fs24 ${escTxt}}`;
+      blob = new Blob([rtf], { type: 'application/msword' });
+    }
+    
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `humanized-output.${type}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    setShowExport(false);
+  };
+
   const hasOutput=mode==='humanize'?!!humanizedText:!!detectResult
   // Filter legend to only show detected categories
   const activeCategories=detectResult?new Set(detectResult.spans.map(s=>s.category)):new Set()
@@ -376,6 +406,16 @@ export default function App(){
               <button className="rtf-btn text-btn" onClick={()=>execCmd('removeFormat')}>Clear</button>
               <button className="rtf-btn text-btn" onClick={handleCopyPlain}>{copied?'Copied!':'Copy Plain'}</button>
               <button className="rtf-btn text-btn" onClick={handleCopyFormatted}>{copied?'Copied!':'Copy Formatted'}</button>
+              <div className="export-wrapper" style={{ position: 'relative' }}>
+                <button className="rtf-btn text-btn" onClick={() => setShowExport(!showExport)}>Export ↓</button>
+                {showExport && (
+                  <div className="export-dropdown">
+                    <button className="export-option" onClick={() => handleExport('txt')}>Download .txt</button>
+                    <button className="export-option" onClick={() => handleExport('html')}>Download .html</button>
+                    <button className="export-option" onClick={() => handleExport('doc')}>Download .docx</button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="output-status-bar">
               <span className={`word-count ${outputWords > 0 && Math.abs(outputWords - words) / (words || 1) > 0.2 ? 'warning' : outputWords > 0 && Math.abs(outputWords - words) / (words || 1) <= 0.1 ? 'success' : ''}`}>
