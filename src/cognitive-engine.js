@@ -160,6 +160,148 @@ function salienceDistortion(sentences, config) {
   })
 }
 
+// ── MODULE 6: Chunked Reasoning Boundaries ──
+function chunkedReasoning(sentences, config) {
+  if (config.difficulty === 'easy') return sentences
+  if (sentences.length < 6) return sentences
+
+  const miniConclusions = [
+    'So that\'s the core of it.',
+    'Anyway, that part makes sense.',
+    'That\'s basically the gist.',
+    'Which brings up the next point.',
+    'Worth keeping in mind going forward.'
+  ]
+
+  let result = [...sentences]
+  const chunkSize = Math.floor(3 + Math.random() * 2)
+
+  for (let i = chunkSize; i < result.length - 1; i += chunkSize) {
+    if (Math.random() < 0.4) {
+      result.splice(i, 0, miniConclusions[Math.floor(Math.random() * miniConclusions.length)])
+      i++
+    }
+  }
+
+  return result
+}
+
+// ── MODULE 7: Episodic Memory & Visuomotor Grounding ──
+const VISUOMOTOR_REPLACEMENTS = [
+  { pattern: /\bthe data (?:clearly )?(?:demonstrates|shows|indicates)\b/gi,
+    replace: 'if you look at how these numbers line up' },
+  { pattern: /\bit is evident that\b/gi,
+    replace: 'you can see pretty clearly that' },
+  { pattern: /\bthis concept underpins\b/gi,
+    replace: 'this idea gives us a solid place to stand when looking at' },
+  { pattern: /\bresearch confirms\b/gi,
+    replace: 'the numbers back this up' },
+  { pattern: /\banalysis reveals\b/gi,
+    replace: 'when you dig into it' },
+  { pattern: /\bit can be observed that\b/gi,
+    replace: 'you start to notice that' },
+  { pattern: /\bstatistics demonstrate\b/gi,
+    replace: 'the numbers tell a pretty clear story' },
+  { pattern: /\bevidence suggests\b/gi,
+    replace: 'everything points to' }
+]
+
+function visuomotorGrounding(text, config) {
+  let result = text
+  VISUOMOTOR_REPLACEMENTS.forEach(({ pattern, replace }) => {
+    result = result.replace(pattern, () => {
+      return Math.random() < 0.6 ? replace : pattern.source
+    })
+  })
+  return result
+}
+
+// ── MODULE 8: Functional Analogy Injection ──
+const ANALOGY_TRIGGERS = {
+  'network bandwidth': 'a crowded hallway where everyone\'s trying to squeeze through one door at the same time',
+  'database query': 'asking someone to find a specific book in a massive library with no catalog',
+  'cache': 'keeping your most-used stuff on your desk instead of filing it away every time',
+  'encryption': 'locking a message in a box and only giving the key to the right person',
+  'api': 'a waiter taking your order to the kitchen — you don\'t go back there yourself',
+  'algorithm': 'a recipe — follow the steps and you get the same result every time',
+  'machine learning': 'teaching by example rather than writing out every rule explicitly',
+  'recursion': 'a mirror reflecting another mirror — it keeps going until something stops it',
+  'server': 'a really fast computer in a room somewhere that handles requests all day',
+  'cloud': 'someone else\'s computer that you rent and access over the internet'
+}
+
+function analogyInjection(text, config) {
+  if (config.style === 'academic') return text
+
+  let result = text
+  Object.entries(ANALOGY_TRIGGERS).forEach(([trigger, analogy]) => {
+    const pattern = new RegExp(`\\b${trigger}\\b`, 'gi')
+    result = result.replace(pattern, (match) => {
+      if (Math.random() > 0.3) return match
+      return `${match} — think of it like ${analogy}`
+    })
+  })
+  return result
+}
+
+// ── MODULE 9: Cognitive Energy Decay ──
+function cognitiveEnergyDecay(sentences, config) {
+  if (config.difficulty === 'easy') return sentences
+  if (sentences.length < 8) return sentences
+
+  const decayStartIndex = Math.floor(sentences.length * 0.65)
+
+  return sentences.map((sentence, i) => {
+    if (i < decayStartIndex) return sentence
+
+    const decayProgress = (i - decayStartIndex) / (sentences.length - decayStartIndex)
+    const decayProbability = decayProgress * config.energyDecay
+
+    if (Math.random() > decayProbability) return sentence
+
+    const decayTransforms = [
+      s => s.replace(/\b(specifically|particularly|especially|notably)\s+/gi, ''),
+      s => s.length > 100 ? s.substring(0, s.lastIndexOf(' ', 80)) + ' — you get the idea.' : s,
+      s => s.replace(/\.$/, ' — or something along those lines.'),
+      s => s.replace(/\b(\d+(?:\.\d+)?)\s*(percent|%)/gi, 'a fair amount')
+    ]
+
+    const transform = decayTransforms[Math.floor(Math.random() * decayTransforms.length)]
+    return transform(sentence)
+  })
+}
+
+// ── MODULE 10: Goal-First Thought Modeling ──
+function goalFirstModeling(paragraphs, config) {
+  const GOAL_SIGNALS = {
+    persuade:   ['should', 'must', 'important', 'critical', 'essential', 'need to'],
+    explain:    ['works by', 'means that', 'refers to', 'is defined as', 'in other words'],
+    warn:       ['careful', 'avoid', 'danger', 'risk', 'problem', 'issue', 'mistake'],
+    reflect:    ['I think', 'I believe', 'in my experience', 'looking back', 'it seems'],
+    justify:    ['because', 'reason', 'therefore', 'which is why', 'this is why']
+  }
+
+  return paragraphs.map(para => {
+    const lower = para.toLowerCase()
+    let detectedGoal = 'explain'
+    let maxSignals = 0
+
+    Object.entries(GOAL_SIGNALS).forEach(([goal, signals]) => {
+      const count = signals.filter(s => lower.includes(s)).length
+      if (count > maxSignals) { maxSignals = count; detectedGoal = goal }
+    })
+
+    if (detectedGoal === 'warn' && Math.random() < 0.4) {
+      return para + ' Seriously, don\'t skip this part.'
+    }
+    if (detectedGoal === 'persuade' && Math.random() < 0.3) {
+      return 'Here\'s the thing — ' + para.charAt(0).toLowerCase() + para.slice(1)
+    }
+
+    return para
+  })
+}
+
 // ── MASTER CLASS ──
 export class CognitiveEngine {
   constructor(overrides = {}) {
@@ -169,11 +311,17 @@ export class CognitiveEngine {
   run(text) {
     const cfg = this.config
 
-    // Module 1: Cognitive load decay (operates on full text)
+    // Module 1: Cognitive load decay (full text)
     let result = cognitiveLoadDecay(text, cfg)
 
-    // Module 4: Retrospective amendment (operates on full text)
+    // Module 4: Retrospective amendment (full text)
     result = retrospectiveAmendment(result, cfg)
+
+    // Module 7: Visuomotor grounding (full text)
+    result = visuomotorGrounding(result, cfg)
+
+    // Module 8: Analogy injection (full text)
+    result = analogyInjection(result, cfg)
 
     // Split into sentences for sentence-level modules
     let sentences = result.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [result]
@@ -187,7 +335,20 @@ export class CognitiveEngine {
     // Module 5: Salience distortion
     sentences = salienceDistortion(sentences, cfg)
 
-    return sentences.join(' ')
+    // Module 6: Chunked reasoning boundaries
+    sentences = chunkedReasoning(sentences, cfg)
+
+    // Module 9: Cognitive energy decay
+    sentences = cognitiveEnergyDecay(sentences, cfg)
+
+    // Rejoin, then split to paragraphs for Module 10
+    result = sentences.join(' ')
+    let paragraphs = result.split(/\n\n+/).filter(p => p.trim().length > 0)
+
+    // Module 10: Goal-first thought modeling
+    paragraphs = goalFirstModeling(paragraphs, cfg)
+
+    return paragraphs.join('\n\n')
   }
 }
 
