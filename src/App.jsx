@@ -241,7 +241,7 @@ export default function App(){
               <div className="rtf-divider" style={{marginLeft:'auto'}}/>
               <button className="rtf-btn text-btn" onClick={()=>execCmd('removeFormat')}>Clear</button>
               <button className="rtf-btn text-btn" onClick={handleCopyPlain}>{copied?'Copied!':'Copy Plain'}</button>
-              <button className="rtf-btn text-btn" onClick={handleCopyFormatted}>{copied?'Copied!':'Copy HTML'}</button>
+              <button className="rtf-btn text-btn" onClick={handleCopyFormatted}>{copied?'Copied!':'Copy Formatted'}</button>
             </div>
             {humanizeNote&&<div className={humanizeNote.type==='warning'?'warning-banner':'info-banner'}><Info size={16}/>{humanizeNote.text}</div>}
             <div ref={outputRef} className="output-text" contentEditable={true} suppressContentEditableWarning={true}
