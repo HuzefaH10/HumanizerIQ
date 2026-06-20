@@ -73,19 +73,22 @@ const MEM_ANCHORS=["in one project I worked on,","I remember running into this,"
 const DIGRESSIONS=["One unexpected side effect of this was how it changed the whole approach.","I once ran into a case where this backfired completely.","An odd exception to this rule popped up in practice.","Side note, this almost never works the way textbooks describe it.","There's a funny story here but I'll save it for another time."]
 const CONTEXT_IDIOMS=["at the end of the day","to put it bluntly","in a nutshell","when push comes to shove","for what it's worth","the bottom line is","all things considered","no two ways about it"]
 
-function t_quirks(sentences, style, isHard){
+function t_quirks(sentences, style, isHard, docState){
   const r=[...sentences];let wc=250
   const totalWordCount=r.join(' ').trim().split(/\s+/).length
   for(let i=1;i<r.length;i++){
     wc+=r[i].split(/\s+/).length
     if(wc>=250){
-      const opts=['t8'];
-      if(totalWordCount>=200)opts.push('t5');
+      const opts=[];
+      if(!docState.cogUsed)opts.push('t8');
+      if(totalWordCount>=400 && !docState.fragUsed)opts.push('t5');
       if(style!=='Academic')opts.push('t7','t14');
       if(isHard)opts.push('t9','t10');
+      
+      if(opts.length===0)continue;
       const choice=pick(opts);
-      if(choice==='t5'){r.splice(i+1,0,' '+pick(FRAGS));i++}
-      else if(choice==='t8'){const s=r[i].trim();r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1)}
+      if(choice==='t5'){r.splice(i+1,0,' '+pick(FRAGS));docState.fragUsed=true;i++}
+      else if(choice==='t8'){const s=r[i].trim();r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1);docState.cogUsed=true}
       else if(choice==='t7'){const s=r[i].trim();r[i]=' '+pick(PRAG_INSERTS)+' '+s[0].toLowerCase()+s.slice(1)}
       else if(choice==='t14'){const s=r[i].trim();r[i]=' '+pick(CONTEXT_IDIOMS)+', '+s[0].toLowerCase()+s.slice(1)}
       else if(choice==='t9'){const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS)+' '+s[0].toLowerCase()+s.slice(1)}
@@ -133,12 +136,18 @@ function t13_collocations(text){
 }
 
 // ── T15: Temporal Grounding (medium+) ──
-const TIME_ANCHORS=["earlier","recently","at the time","a while back","not long after","at that point","back then","since then","around that time"]
+const TIME_ANCHORS=["earlier","recently","at the time","a while back","not long after","at that point","since then","around that time"]
 function t15_temporal(sentences){
-  const r=[...sentences]
-  r.forEach((_,i)=>{if(chance(0.05)&&r[i].trim().split(/\s+/).length>6){
-    const words=r[i].trim().split(/\s+/);words.splice(1,0,pick(TIME_ANCHORS))
-    r[i]=' '+words.join(' ')}})
+  const r=[...sentences];let wc=0
+  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
+    if(wc>=150){
+      if(chance(0.5)){
+        const t=pick(TIME_ANCHORS);const s=r[i].trim()
+        r[i]=' '+t[0].toUpperCase()+t.slice(1)+', '+s[0].toLowerCase()+s.slice(1)
+      }
+      wc=0
+    }
+  }
   return r
 }
 
@@ -217,18 +226,26 @@ function chunkText(text,max=2500){
 // ── MASTER HUMANIZER ──
 export function runHumanizer(text,style='Professional',difficulty='Medium'){
   if(!text||text.trim().length===0)return{result:'',warning:'No text provided.'}
-  const wc=text.trim().split(/\s+/).length
-  if(wc<20)return{result:text,warning:'Text is under 20 words — too short for effective humanization.'}
+  
+  let cleanedText = text;
+  if(cleanedText.includes('"')){
+    cleanedText = cleanedText.substring(cleanedText.indexOf('"'));
+  }
 
-  const det=runDetection(text)
-  if(det.score<15)return{result:text,note:`This text already reads as human-written (AI score: ${det.score}%). No changes needed.`}
+  const wc=cleanedText.trim().split(/\s+/).length
+  if(wc<20)return{result:cleanedText,warning:'Text is under 20 words — too short for effective humanization.'}
 
-  const chunks=chunkText(text)
-  const processed=chunks.map(chunk=>processChunk(chunk,style,difficulty))
+  const det=runDetection(cleanedText)
+  if(det.score<15)return{result:cleanedText,note:`This text already reads as human-written (AI score: ${det.score}%). No changes needed.`}
+
+  const docState = { fragUsed: false, cogUsed: false };
+
+  const chunks=chunkText(cleanedText)
+  const processed=chunks.map(chunk=>processChunk(chunk,style,difficulty,docState))
   return{result:processed.join('\n\n'),note:det.score>70?`Original AI score: ${det.score}%. Heavy rewriting applied.`:undefined}
 }
 
-function processChunk(text,style,difficulty){
+function processChunk(text,style,difficulty,docState){
   const isEasy=difficulty==='Easy',isMedium=difficulty==='Medium',isHard=difficulty==='Hard'
   const{cleaned,zones}=extractProtected(text)
   let r=cleaned
@@ -246,7 +263,7 @@ function processChunk(text,style,difficulty){
   if(isMedium||isHard){
     let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
     sents=t4_sentencevar(sents, isHard)         // T4
-    sents=t_quirks(sents, style, isHard)        // Unified quirks
+    sents=t_quirks(sents, style, isHard, docState)        // Unified quirks
     sents=t6_dysfluency(sents)          // T6
     sents=t15_temporal(sents)           // T15
     sents=t17_rhymedisrupt(sents)       // T17
