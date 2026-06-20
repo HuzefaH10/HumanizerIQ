@@ -4,7 +4,17 @@ import{runDetection}from'./detector'
 import{CognitiveEngine}from'./cognitive-engine'
 
 function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
-function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
+function pick(arr, docState){
+  if(!docState || !docState.usedPhrases) return arr[Math.floor(Math.random()*arr.length)]
+  const available = arr.filter(x => {
+    const val = Array.isArray(x) ? x[0] : x;
+    return !docState.usedPhrases.has(val);
+  })
+  if(available.length === 0) return arr[Math.floor(Math.random()*arr.length)]
+  const choice = available[Math.floor(Math.random()*available.length)]
+  docState.usedPhrases.add(Array.isArray(choice) ? choice[0] : choice)
+  return choice
+}
 function chance(pct){return Math.random()<pct}
 function countWords(text){return text.trim().split(/\s+/).filter(w=>w.length>0).length}
 
@@ -63,7 +73,7 @@ function t4_sentencevar(sentences, isHard){
           }
           break}}}}
     if(isHard && cw<7&&nw<7&&nw>0&&chance(0.4)){
-      const merged=r[i].replace(/[.!?]+$/,'')+' — '+r[i+1].trim()[0].toLowerCase()+r[i+1].trim().slice(1)
+      const merged=r[i].replace(/[.!?]+$/,'')+', and '+r[i+1].trim()[0].toLowerCase()+r[i+1].trim().slice(1)
       r.splice(i,2,merged)}}
   return r
 }
@@ -88,7 +98,7 @@ function t_quirks(sentences, style, isHard, docState){
 
     // Cognitive transitions: 1 per 300w (Professional/Casual medium+), 1 per doc max
     if(cogWc>=300 && !docState.cogUsed && !isAcademic){
-      const s=r[i].trim();r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1)
+      const s=r[i].trim();r[i]=' '+pick(COG_TRANSITIONS, docState)+' '+s[0].toLowerCase()+s.slice(1)
       docState.cogUsed=true;cogWc=0;continue
     }
 
@@ -96,28 +106,28 @@ function t_quirks(sentences, style, isHard, docState){
     if(pragWc>=250 && !isAcademic){
       const pool=isProfessional?["That said,","Honestly,","Admittedly,"]:PRAG_INSERTS
       if(chance(0.4)){
-        const s=r[i].trim();r[i]=' '+pick(pool)+' '+s[0].toLowerCase()+s.slice(1);pragWc=0;continue
+        const s=r[i].trim();r[i]=' '+pick(pool, docState)+' '+s[0].toLowerCase()+s.slice(1);pragWc=0;continue
       }
     }
 
     // Fragments: never Academic, Professional/Casual hard only (1 per 400w, 1 per doc max)
     if(isHard && !isAcademic && fragWc>=400 && totalWordCount>=400 && !docState.fragUsed){
-      if(chance(0.5)){r.splice(i+1,0,' '+pick(FRAGS));docState.fragUsed=true;fragWc=0;i++;continue}
+      if(chance(0.5)){r.splice(i+1,0,' '+pick(FRAGS, docState));docState.fragUsed=true;fragWc=0;i++;continue}
     }
 
     // Casual Hard: memory anchors per 300w
     if(isHard && isCasual && cogWc>=250 && chance(0.2)){
-      const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS)+' '+s[0].toLowerCase()+s.slice(1);continue
+      const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS, docState)+' '+s[0].toLowerCase()+s.slice(1);continue
     }
 
     // Casual Hard: micro-digressions
     if(isHard && isCasual && chance(0.02) && countWords(r[i])>10){
-      r.splice(i+1,0,' '+pick(DIGRESSIONS));i++;continue
+      r.splice(i+1,0,' '+pick(DIGRESSIONS, docState));i++;continue
     }
 
     // Context idioms (Professional/Casual medium+)
     if(!isAcademic && pragWc>=300 && chance(0.15)){
-      const s=r[i].trim();r[i]=' '+pick(CONTEXT_IDIOMS)+', '+s[0].toLowerCase()+s.slice(1);pragWc=0
+      const s=r[i].trim();r[i]=' '+pick(CONTEXT_IDIOMS, docState)+', '+s[0].toLowerCase()+s.slice(1);pragWc=0
     }
   }
   return r
@@ -125,10 +135,10 @@ function t_quirks(sentences, style, isHard, docState){
 
 // ── T6: Dysfluency Injection (medium+) ──
 const DYSFLUENCIES=["actually","I mean","well","to be fair","sort of","pretty much","kind of","or something like that","in a way","more or less"]
-function t6_dysfluency(sentences){
+function t6_dysfluency(sentences, docState){
   const r=[...sentences];const rate=0.02
   r.forEach((_,i)=>{if(chance(rate)&&countWords(r[i])>6){
-    const d=pick(DYSFLUENCIES);const words=r[i].trim().split(/\s+/)
+    const d=pick(DYSFLUENCIES, docState);const words=r[i].trim().split(/\s+/)
     const pos=Math.floor(words.length*0.3)+1;words.splice(pos,0,d)
     r[i]=' '+words.join(' ')}})
   return r
@@ -144,10 +154,10 @@ function t11_enumeration(text){
 
 // ── T12: Uneven Certainty (hard) ──
 const HEDGES=["I think","probably","seems like","not 100% sure but","from what I can tell","as far as I know","if I'm not mistaken","arguably"]
-function t12_uncertainty(sentences){
+function t12_uncertainty(sentences, docState){
   const r=[...sentences]
   r.forEach((_,i)=>{if(chance(0.15)&&countWords(r[i])>8){
-    const s=r[i].trim();r[i]=' '+pick(HEDGES)+', '+s[0].toLowerCase()+s.slice(1)}})
+    const s=r[i].trim();r[i]=' '+pick(HEDGES, docState)+' '+s[0].toLowerCase()+s.slice(1)}})
   return r
 }
 
@@ -161,12 +171,12 @@ function t13_collocations(text){
 
 // ── T15: Temporal Grounding (medium+) ──
 const TIME_ANCHORS=["earlier","recently","at the time","a while back","not long after","at that point","since then","around that time"]
-function t15_temporal(sentences){
+function t15_temporal(sentences, docState){
   const r=[...sentences];let wc=0
   for(let i=1;i<r.length;i++){wc+=countWords(r[i])
     if(wc>=150){
       if(chance(0.5)){
-        const t=pick(TIME_ANCHORS);const s=r[i].trim()
+        const t=pick(TIME_ANCHORS, docState);const s=r[i].trim()
         r[i]=' '+t[0].toUpperCase()+t.slice(1)+', '+s[0].toLowerCase()+s.slice(1)
       }
       wc=0
@@ -177,9 +187,9 @@ function t15_temporal(sentences){
 
 // ── T16: Redundancy Weaving (hard) ──
 const EMPHASIS_PAIRS=[["big","massive"],["clear","obvious"],["fast","quick"],["slow","gradual"],["hard","difficult"],["easy","straightforward"],["new","fresh"],["old","dated"],["simple","basic"],["complex","layered"]]
-function t16_redundancy(sentences){
+function t16_redundancy(sentences, docState){
   const r=[...sentences]
-  r.forEach((_,i)=>{if(chance(0.03)){const pair=pick(EMPHASIS_PAIRS)
+  r.forEach((_,i)=>{if(chance(0.03)){const pair=pick(EMPHASIS_PAIRS, docState)
     const rx=new RegExp(`\\b${pair[0]}\\b`,'i')
     if(rx.test(r[i]))r[i]=r[i].replace(rx,`${pair[0]}, ${pair[1]}`)}})
   return r
@@ -202,13 +212,13 @@ function t17_rhymedisrupt(sentences){
 
 // ── T18: Asymmetric Detail Distribution (hard) ──
 const ELABORATIONS=["This is particularly true when you look at the broader picture.","The implications here are worth spending a moment on.","It's one of those things that doesn't get enough attention.","This point deserves a bit more unpacking."]
-function t18_asymmetric(paragraphs){
+function t18_asymmetric(paragraphs, docState){
   if(paragraphs.length<4)return paragraphs
   const r=[...paragraphs]
   // Expand ~20%
   const expandCount=Math.max(1,Math.floor(r.length*0.2))
   for(let n=0;n<expandCount;n++){const i=Math.floor(Math.random()*r.length)
-    r[i]=r[i]+' '+pick(ELABORATIONS)}
+    r[i]=r[i]+' '+pick(ELABORATIONS, docState)}
   // Compress ~20% (remove last sentence)
   const compressCount=Math.max(1,Math.floor(r.length*0.2))
   for(let n=0;n<compressCount;n++){const i=Math.floor(Math.random()*r.length)
@@ -235,8 +245,15 @@ function cleanup(text){
     .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
     .replace(/\n{3,}/g,'\n\n').trim()
   result = result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.').replace(/\ba ([aeiouAEIOU])/g, 'an $1')
-  // Dedup adjacent injections
-  result = result.replace(/(As it turns out|Roughly speaking|Honestly|Also|And|But)[,.]?\s+(As it turns out|Roughly speaking|Honestly|Also|And|But)[,.]?\s+/gi, '$2 ')
+  // Dedup adjacent and nearby injections
+  const markers = ["As it turns out", "Roughly speaking", "For anyone unfamiliar", "Here's what got me", "Surprisingly enough", "If I remember correctly", "Worth keeping in mind", "Anyway", "Plus,", "Also,"];
+  const mStr = markers.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const collisionRx = new RegExp(`(?:${mStr})[,.\\-—]*\\s+((?:\\S+\\s+){0,15}?)(?=${mStr})`, 'gi');
+  let prevR;
+  do {
+    prevR = result;
+    result = result.replace(collisionRx, '$1');
+  } while (result !== prevR);
   // Restore paragraph breaks every 4-5 sentences to prevent wall-of-text
   let sentenceCount = 0
   result = result.replace(/(\. )(?=[A-Z])/g, (m) => { sentenceCount++; return sentenceCount % 5 === 0 ? '.\n\n' : m })
@@ -268,7 +285,7 @@ export function runHumanizer(text,style='Professional',difficulty='Medium'){
   const det=runDetection(cleanedText)
   if(det.score<15)return{result:cleanedText,note:`This text already reads as human-written (AI score: ${det.score}%). No changes needed.`}
 
-  const docState = { fragUsed: false, cogUsed: false };
+  const docState = { fragUsed: false, cogUsed: false, usedPhrases: new Set() };
 
   const chunks=chunkText(cleanedText)
   const processed=chunks.map(chunk=>processChunk(chunk,style,difficulty,docState))
@@ -302,7 +319,7 @@ function processChunk(text,style,difficulty,docState){
     for(let i=1;i<sents.length;i++){
       wc+=countWords(sents[i])
       if(wc>=250 && chance(0.3)){
-        const s=sents[i].trim();sents[i]=' '+pick(PRAG_INSERTS)+' '+s[0].toLowerCase()+s.slice(1);wc=0
+        const s=sents[i].trim();sents[i]=' '+pick(PRAG_INSERTS, docState)+' '+s[0].toLowerCase()+s.slice(1);wc=0
       }
     }
     r=sents.join(' ')
@@ -329,14 +346,14 @@ function processChunk(text,style,difficulty,docState){
       // Casual Medium: sentence splits + rhetorical Qs + opinion markers + pragmatic
       sents=t_quirks(sents,style,isHard,docState)
       // Dysfluency for casual
-      sents=t6_dysfluency(sents)
+      sents=t6_dysfluency(sents, docState)
     }
 
     // Professional medium also gets mild dysfluency
-    if(isProfessional && isMedium) sents=t6_dysfluency(sents)
+    if(isProfessional && isMedium) sents=t6_dysfluency(sents, docState)
 
     // Temporal grounding (not Academic)
-    if(!isAcademic) sents=t15_temporal(sents)
+    if(!isAcademic) sents=t15_temporal(sents, docState)
 
     r=sents.join(' ')
 
@@ -359,19 +376,19 @@ function processChunk(text,style,difficulty,docState){
       // Mild academic uncertainty (not "I think" but "this may suggest")
       const ACAD_HEDGES=["this may suggest","it appears that","one could argue","this seems to indicate","it is plausible that"]
       sents.forEach((_,i)=>{if(chance(0.10)&&countWords(sents[i])>8){
-        const s=sents[i].trim();sents[i]=' '+pick(ACAD_HEDGES)+' '+s[0].toLowerCase()+s.slice(1)}})
+        const s=sents[i].trim();sents[i]=' '+pick(ACAD_HEDGES, docState)+' '+s[0].toLowerCase()+s.slice(1)}})
     }
 
     // Professional Hard: uncertainty modeling + run-ons
     if(isProfessional){
-      sents=t12_uncertainty(sents)
-      sents=t16_redundancy(sents)
+      sents=t12_uncertainty(sents, docState)
+      sents=t16_redundancy(sents, docState)
     }
 
     // Casual Hard: full uncertainty + redundancy + memory anchors
     if(isCasual){
-      sents=t12_uncertainty(sents)
-      sents=t16_redundancy(sents)
+      sents=t12_uncertainty(sents, docState)
+      sents=t16_redundancy(sents, docState)
     }
 
     r=sents.join(' ')
@@ -381,7 +398,7 @@ function processChunk(text,style,difficulty,docState){
 
     // Asymmetric detail distribution (all styles)
     const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
-    r=t18_asymmetric(paras).join('\n\n')
+    r=t18_asymmetric(paras, docState).join('\n\n')
 
     // Oxford comma inconsistency (Professional + Casual)
     if(!isAcademic) r=t19_oxfordcomma(r)
@@ -399,7 +416,7 @@ function processChunk(text,style,difficulty,docState){
         if(awc>=400&&!asideUsed&&chance(0.6)){
           const words=sents2[i].trim().split(' ')
           const pos=Math.floor(words.length*0.7)
-          words.splice(pos,0,pick(ACAD_ASIDES))
+          words.splice(pos,0,pick(ACAD_ASIDES, docState))
           sents2[i]=' '+words.join(' ');awc=0;asideUsed=true
         }
       }
@@ -416,11 +433,13 @@ function processChunk(text,style,difficulty,docState){
     salienceBias:difficulty==='Hard'?0.6:0.3,
     energyDecay:difficulty==='Hard'?0.5:0.2,
     audienceAwareness:style==='Casual'?0.5:style==='Professional'?0.3:0.1,
-    experientialDepth:style==='Casual'?0.5:0.2
+    experientialDepth:style==='Casual'?0.5:0.2,
+    docState:docState
   })
   r=cog.run(r)
 
   r=cleanup(r)
   r=restoreProtected(r,zones)
+  r = r.replace(/(?<=[.!?]\s{1,3})([a-z])/g, c => c.toUpperCase())
   return r
 }

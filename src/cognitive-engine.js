@@ -13,6 +13,17 @@ const COGNITIVE_CONFIG = {
   difficulty:           'medium'
 }
 
+// ── Helper ──
+function pickUnique(arr, config) {
+  const usedPhrases = config?.docState?.usedPhrases;
+  if (!usedPhrases) return arr[Math.floor(Math.random() * arr.length)];
+  const available = arr.filter(x => !usedPhrases.has(x));
+  if (available.length === 0) return arr[Math.floor(Math.random() * arr.length)];
+  const choice = available[Math.floor(Math.random() * available.length)];
+  usedPhrases.add(choice);
+  return choice;
+}
+
 // ── MODULE 1: Cognitive Load & Syntactic Decay ──
 function cognitiveLoadDecay(text, config) {
   if (config.difficulty === 'easy') return text
@@ -54,11 +65,11 @@ function egocentricSequencing(sentences, config) {
         const cause = match[1]
         const effect = match[2]
         const connectors = [
-          `${effect} — mostly because of ${cause}`,
+          `${effect}, mostly because of ${cause}`,
           `${effect}, which happened due to ${cause} anyway`,
           `${effect}. That came down to ${cause}, really.`
         ]
-        return connectors[Math.floor(Math.random() * connectors.length)]
+        return pickUnique(connectors, config)
       }
     }
     return sentence
@@ -87,12 +98,12 @@ function affectiveProsody(sentences, config) {
         ', and maybe that\'s okay actually',
         ', or at least that\'s how it felt at the time'
       ]
-      return sentence.replace(/\.$/, trailers[Math.floor(Math.random() * trailers.length)] + '.')
+      return sentence.replace(/\.$/, pickUnique(trailers, config) + '.')
     }
 
     if (config.affectiveState === 'frustrated') {
-      const interjections = ['Honestly, ', 'Look, ', 'Here\'s the thing — ', 'Strangely enough, ']
-      if (i % 4 === 0) return interjections[Math.floor(Math.random() * interjections.length)] + sentence
+      const interjections = ['Honestly, ', 'Look, ', 'Here\'s the thing, ', 'Strangely enough, ']
+      if (i % 4 === 0) return pickUnique(interjections, config) + sentence
     }
 
     return sentence
@@ -104,13 +115,13 @@ function retrospectiveAmendment(text, config) {
   if (config.difficulty === 'easy') return text
 
   const absolutePatterns = [
-    { pattern: /\balways\b/gi, amendment: '— or almost always, in my experience —' },
-    { pattern: /\bcompletely\b/gi, amendment: '— well, mostly —' },
-    { pattern: /\beveryone\b/gi, amendment: '— or at least most people —' },
-    { pattern: /\bnever\b/gi, amendment: '— or rarely, anyway —' },
-    { pattern: /\bentirely\b/gi, amendment: '— well, largely —' },
-    { pattern: /\bperfectly\b/gi, amendment: '— or near enough —' },
-    { pattern: /\ball\b/gi, amendment: '— most, at least —' }
+    { pattern: /\balways\b/gi, amendment: '(or almost always, in my experience)' },
+    { pattern: /\bcompletely\b/gi, amendment: '(well, mostly)' },
+    { pattern: /\beveryone\b/gi, amendment: '(or at least most people)' },
+    { pattern: /\bnever\b/gi, amendment: '(or rarely, anyway)' },
+    { pattern: /\bentirely\b/gi, amendment: '(well, largely)' },
+    { pattern: /\bperfectly\b/gi, amendment: '(or near enough)' },
+    { pattern: /\ball\b/gi, amendment: '(most, at least)' }
   ]
 
   let result = text
@@ -144,7 +155,7 @@ function salienceDistortion(sentences, config) {
         ' Takes a second to find if you\'re new to it.',
         ' Worth double-checking before moving on.'
       ]
-      return sentence.replace(/\.$/, expansions[Math.floor(Math.random() * expansions.length)])
+      return sentence.replace(/\.$/, pickUnique(expansions, config))
     }
 
     if (abstractMarkers.test(sentence) && Math.random() < config.salienceBias * 0.5) {
@@ -153,7 +164,7 @@ function salienceDistortion(sentences, config) {
         ' Standard stuff.',
         ' Most people know this part already.'
       ]
-      return sentence.replace(/\.$/, compressions[Math.floor(Math.random() * compressions.length)])
+      return sentence.replace(/\.$/, pickUnique(compressions, config))
     }
 
     return sentence
@@ -178,7 +189,7 @@ function chunkedReasoning(sentences, config) {
 
   for (let i = chunkSize; i < result.length - 1; i += chunkSize) {
     if (Math.random() < 0.4) {
-      result.splice(i, 0, miniConclusions[Math.floor(Math.random() * miniConclusions.length)])
+      result.splice(i, 0, pickUnique(miniConclusions, config))
       i++
     }
   }
@@ -238,7 +249,7 @@ function analogyInjection(text, config) {
     const pattern = new RegExp(`\\b${trigger}\\b`, 'gi')
     result = result.replace(pattern, (match) => {
       if (Math.random() > 0.3) return match
-      return `${match} — think of it like ${analogy}`
+      return `${match}, think of it like ${analogy}`
     })
   })
   return result
@@ -261,8 +272,8 @@ function cognitiveEnergyDecay(sentences, config) {
 
     const decayTransforms = [
       s => s.replace(/\b(specifically|particularly|especially|notably)\s+/gi, ''),
-      s => s.length > 100 ? s.substring(0, s.lastIndexOf(' ', 80)) + ' — you get the idea.' : s,
-      s => s.replace(/\.$/, ' — or something along those lines.'),
+      s => s.length > 100 ? s.substring(0, s.lastIndexOf(' ', 80)) + ', you get the idea.' : s,
+      s => s.replace(/\.$/, ', or something along those lines.'),
       s => s.replace(/\b(\d+(?:\.\d+)?)\s*(percent|%)/gi, 'a fair amount')
     ]
 
@@ -295,7 +306,7 @@ function goalFirstModeling(paragraphs, config) {
       return para + ' Seriously, don\'t skip this part.'
     }
     if (detectedGoal === 'persuade' && Math.random() < 0.3 && idx > 0) {
-      return 'Here\'s the thing — ' + para.charAt(0).toLowerCase() + para.slice(1)
+      return 'Here\'s the thing, ' + para.charAt(0).toLowerCase() + para.slice(1)
     }
 
     return para
@@ -319,9 +330,7 @@ function knowledgeBoundaryExpression(sentences, config) {
   const insertAt = Math.floor(sentences.length * 0.6)
 
   if (Math.random() < 0.25) {
-    result.splice(insertAt, 0,
-      KNOWLEDGE_BOUNDARY_INJECTIONS[Math.floor(Math.random() * KNOWLEDGE_BOUNDARY_INJECTIONS.length)]
-    )
+    result.splice(insertAt, 0, pickUnique(KNOWLEDGE_BOUNDARY_INJECTIONS, config))
   }
 
   return result
@@ -343,7 +352,7 @@ function socialAudienceModeling(sentences, config) {
   const result = [...sentences]
   const category = ['familiar', 'newcomer', 'peer'][Math.floor(Math.random() * 3)]
   const openers = AUDIENCE_OPENERS[category]
-  const opener = openers[Math.floor(Math.random() * openers.length)]
+  const opener = pickUnique(openers, config)
 
   if (result.length > 3) result.splice(1, 0, opener)
 
@@ -373,7 +382,7 @@ function affectLeakage(sentences, config) {
     const category = config.affectiveState === 'frustrated' ? 'negative' :
                      config.affectiveState === 'reflective' ? 'positive' : 'neutral'
     const leakages = AFFECT_LEAKAGE[category]
-    const leakage = leakages[Math.floor(Math.random() * leakages.length)]
+    const leakage = pickUnique(leakages, config)
 
     leakageCount++
     return leakage.charAt(0).toUpperCase() + leakage.slice(1) + ' ' +
@@ -384,7 +393,7 @@ function affectLeakage(sentences, config) {
 // ── MODULE 14: Memory Reconstruction Artifacts ──
 const RECALL_MARKERS = [
   'if I remember correctly,',
-  'I think the order here might be slightly off, but —',
+  'I think the order here might be slightly off, but',
   'roughly speaking,',
   'I don\'t remember exactly when this became clear, but',
   'somewhere along the way,'
@@ -402,7 +411,7 @@ function memoryReconstructionArtifacts(sentences, config) {
     if (Math.random() > 0.12) return sentence
 
     count++
-    const marker = RECALL_MARKERS[Math.floor(Math.random() * RECALL_MARKERS.length)]
+    const marker = pickUnique(RECALL_MARKERS, config)
     return marker.charAt(0).toUpperCase() + marker.slice(1) + ' ' +
            sentence.charAt(0).toLowerCase() + sentence.slice(1)
   })
@@ -411,7 +420,7 @@ function memoryReconstructionArtifacts(sentences, config) {
 // ── MODULE 15: Cognitive Dissonance Markers ──
 const DISSONANCE_BRIDGES = [
   'I know this sounds counterintuitive, but',
-  'It seems contradictory, and honestly it kind of is —',
+  'It seems contradictory, and honestly it kind of is,',
   'This might seem to conflict with what I said earlier, but',
   'Oddly enough, both of these things can be true at once.',
   'I know it sounds odd, but it works.'
@@ -426,8 +435,8 @@ function cognitiveDissonanceMarkers(sentences, config) {
 
   if (Math.random() < 0.2) {
     const insertAt = Math.floor(sentences.length * 0.5)
-    const bridge = DISSONANCE_BRIDGES[Math.floor(Math.random() * DISSONANCE_BRIDGES.length)]
-    result[insertAt] = bridge + ' — ' + result[insertAt].charAt(0).toLowerCase() + result[insertAt].slice(1)
+    const bridge = pickUnique(DISSONANCE_BRIDGES, config)
+    result[insertAt] = bridge + ', ' + result[insertAt].charAt(0).toLowerCase() + result[insertAt].slice(1)
   }
 
   return result
