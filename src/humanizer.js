@@ -1,6 +1,7 @@
 // HumanizerIQ — 20-Transform Humanizer Engine
 import{CONTRACTION_PAIRS,VOCAB_REPLACEMENTS,VOCAB_ACADEMIC,VOCAB_CASUAL,IDIOMS,UNNATURAL_COLLOCATIONS,FUNCTION_WORDS}from'./engine-data'
 import{runDetection}from'./detector'
+import{CognitiveEngine}from'./cognitive-engine'
 
 function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
@@ -399,6 +400,10 @@ function processChunk(text,style,difficulty,docState){
       r=sents2.join(' ')
     }
   }
+
+  // ── Cognitive simulation layer (runs after all transforms) ──
+  const cog=new CognitiveEngine({style:style.toLowerCase(),difficulty:difficulty.toLowerCase()})
+  r=cog.run(r)
 
   r=cleanup(r)
   r=restoreProtected(r,zones)
