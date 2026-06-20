@@ -302,53 +302,187 @@ function goalFirstModeling(paragraphs, config) {
   })
 }
 
+// ── MODULE 11: Knowledge Boundary Expression ──
+const KNOWLEDGE_BOUNDARY_INJECTIONS = [
+  'I understand this part fairly well, though beyond that it gets a bit fuzzy.',
+  'That\'s roughly where my knowledge starts running out, honestly.',
+  'I\'m less clear on the specifics beyond this point.',
+  'The details get complicated from here — I won\'t pretend I have all of them.',
+  'This is where it gets outside my immediate experience.'
+]
+
+function knowledgeBoundaryExpression(sentences, config) {
+  if (config.style === 'academic') return sentences
+  if (sentences.length < 5) return sentences
+
+  const result = [...sentences]
+  const insertAt = Math.floor(sentences.length * 0.6)
+
+  if (Math.random() < 0.25) {
+    result.splice(insertAt, 0,
+      KNOWLEDGE_BOUNDARY_INJECTIONS[Math.floor(Math.random() * KNOWLEDGE_BOUNDARY_INJECTIONS.length)]
+    )
+  }
+
+  return result
+}
+
+// ── MODULE 12: Social Audience Modeling ──
+const AUDIENCE_OPENERS = {
+  familiar:   ['If you already know this, skip ahead.', 'You probably know this already, but —',
+                'This might be obvious if you\'ve done it before.'],
+  newcomer:   ['If you\'re new to this,', 'For anyone unfamiliar,', 'Just to set the context —'],
+  peer:       ['As you can imagine,', 'You\'ve probably run into this before.',
+                'You know how it goes —']
+}
+
+function socialAudienceModeling(sentences, config) {
+  if (config.style === 'academic') return sentences
+  if (Math.random() > config.audienceAwareness) return sentences
+
+  const result = [...sentences]
+  const category = ['familiar', 'newcomer', 'peer'][Math.floor(Math.random() * 3)]
+  const openers = AUDIENCE_OPENERS[category]
+  const opener = openers[Math.floor(Math.random() * openers.length)]
+
+  if (result.length > 3) result.splice(1, 0, opener)
+
+  return result
+}
+
+// ── MODULE 13: Affect Leakage ──
+const AFFECT_LEAKAGE = {
+  positive: ['surprisingly enough,', 'which is actually pretty cool,',
+             'and this is the interesting part —', 'here\'s what got me —'],
+  negative: ['strangely enough,', 'it bothered me that', 'which is frustrating because',
+             'weirdly,', 'oddly enough,'],
+  neutral:  ['as it turns out,', 'interestingly,', 'which is worth noting —',
+             'come to think of it,']
+}
+
+function affectLeakage(sentences, config) {
+  if (config.style === 'academic') return sentences
+
+  let leakageCount = 0
+  const maxLeakage = Math.max(1, Math.floor(sentences.length / 8))
+
+  return sentences.map(sentence => {
+    if (leakageCount >= maxLeakage) return sentence
+    if (Math.random() > 0.15) return sentence
+
+    const category = config.affectiveState === 'frustrated' ? 'negative' :
+                     config.affectiveState === 'reflective' ? 'positive' : 'neutral'
+    const leakages = AFFECT_LEAKAGE[category]
+    const leakage = leakages[Math.floor(Math.random() * leakages.length)]
+
+    leakageCount++
+    return leakage.charAt(0).toUpperCase() + leakage.slice(1) + ' ' +
+           sentence.charAt(0).toLowerCase() + sentence.slice(1)
+  })
+}
+
+// ── MODULE 14: Memory Reconstruction Artifacts ──
+const RECALL_MARKERS = [
+  'if I remember correctly,',
+  'I think the order here might be slightly off, but —',
+  'roughly speaking,',
+  'I don\'t remember exactly when this became clear, but',
+  'somewhere along the way,'
+]
+
+function memoryReconstructionArtifacts(sentences, config) {
+  if (config.style === 'academic') return sentences
+  if (config.difficulty === 'easy') return sentences
+
+  let count = 0
+  const max = 1
+
+  return sentences.map(sentence => {
+    if (count >= max) return sentence
+    if (Math.random() > 0.12) return sentence
+
+    count++
+    const marker = RECALL_MARKERS[Math.floor(Math.random() * RECALL_MARKERS.length)]
+    return marker.charAt(0).toUpperCase() + marker.slice(1) + ' ' +
+           sentence.charAt(0).toLowerCase() + sentence.slice(1)
+  })
+}
+
+// ── MODULE 15: Cognitive Dissonance Markers ──
+const DISSONANCE_BRIDGES = [
+  'I know this sounds counterintuitive, but',
+  'It seems contradictory, and honestly it kind of is —',
+  'This might seem to conflict with what I said earlier, but',
+  'Oddly enough, both of these things can be true at once.',
+  'I know it sounds odd, but it works.'
+]
+
+function cognitiveDissonanceMarkers(sentences, config) {
+  if (config.style === 'academic') return sentences
+  if (config.difficulty !== 'hard') return sentences
+  if (sentences.length < 6) return sentences
+
+  const result = [...sentences]
+
+  if (Math.random() < 0.2) {
+    const insertAt = Math.floor(sentences.length * 0.5)
+    const bridge = DISSONANCE_BRIDGES[Math.floor(Math.random() * DISSONANCE_BRIDGES.length)]
+    result[insertAt] = bridge + ' — ' + result[insertAt].charAt(0).toLowerCase() + result[insertAt].slice(1)
+  }
+
+  return result
+}
+
 // ── MASTER CLASS ──
 export class CognitiveEngine {
-  constructor(overrides = {}) {
-    this.config = { ...COGNITIVE_CONFIG, ...overrides }
+  constructor(config = {}) {
+    this.config = { ...COGNITIVE_CONFIG, ...config }
   }
 
   run(text) {
     const cfg = this.config
 
-    // Module 1: Cognitive load decay (full text)
-    let result = cognitiveLoadDecay(text, cfg)
+    // Split into paragraphs
+    let paragraphs = text.split(/\n\n+/)
 
-    // Module 4: Retrospective amendment (full text)
-    result = retrospectiveAmendment(result, cfg)
-
-    // Module 7: Visuomotor grounding (full text)
-    result = visuomotorGrounding(result, cfg)
-
-    // Module 8: Analogy injection (full text)
-    result = analogyInjection(result, cfg)
-
-    // Split into sentences for sentence-level modules
-    let sentences = result.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [result]
-
-    // Module 2: Egocentric sequencing
-    sentences = egocentricSequencing(sentences, cfg)
-
-    // Module 3: Affective prosody
-    sentences = affectiveProsody(sentences, cfg)
-
-    // Module 5: Salience distortion
-    sentences = salienceDistortion(sentences, cfg)
-
-    // Module 6: Chunked reasoning boundaries
-    sentences = chunkedReasoning(sentences, cfg)
-
-    // Module 9: Cognitive energy decay
-    sentences = cognitiveEnergyDecay(sentences, cfg)
-
-    // Rejoin, then split to paragraphs for Module 10
-    result = sentences.join(' ')
-    let paragraphs = result.split(/\n\n+/).filter(p => p.trim().length > 0)
-
-    // Module 10: Goal-first thought modeling
+    // Paragraph-level: Module 10
     paragraphs = goalFirstModeling(paragraphs, cfg)
 
-    return paragraphs.join('\n\n')
+    // Process each paragraph through sentence-level modules
+    paragraphs = paragraphs.map(para => {
+      let sentences = para.match(/[^.!?]+[.!?]+/g) || [para]
+
+      sentences = egocentricSequencing(sentences, cfg)
+      sentences = affectiveProsody(sentences, cfg)
+      sentences = salienceDistortion(sentences, cfg)
+      sentences = chunkedReasoning(sentences, cfg)
+      sentences = cognitiveEnergyDecay(sentences, cfg)
+      sentences = knowledgeBoundaryExpression(sentences, cfg)
+      sentences = socialAudienceModeling(sentences, cfg)
+      sentences = affectLeakage(sentences, cfg)
+      sentences = memoryReconstructionArtifacts(sentences, cfg)
+      sentences = cognitiveDissonanceMarkers(sentences, cfg)
+
+      return sentences.join(' ')
+    })
+
+    // Rejoin paragraphs
+    let result = paragraphs.join('\n\n')
+
+    // Text-level transforms
+    result = cognitiveLoadDecay(result, cfg)
+    result = retrospectiveAmendment(result, cfg)
+    result = visuomotorGrounding(result, cfg)
+    result = analogyInjection(result, cfg)
+
+    // Cleanup
+    result = result
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s([.,!?])/g, '$1')
+      .replace(/([.!?])\s*([a-z])/g, (m, p, c) => `${p} ${c.toUpperCase()}`)
+      .trim()
+
+    return result
   }
 }
 

@@ -402,7 +402,16 @@ function processChunk(text,style,difficulty,docState){
   }
 
   // ── Cognitive simulation layer (runs after all transforms) ──
-  const cog=new CognitiveEngine({style:style.toLowerCase(),difficulty:difficulty.toLowerCase()})
+  const cog=new CognitiveEngine({
+    style:style.toLowerCase(),
+    difficulty:difficulty.toLowerCase(),
+    affectiveState:style==='Casual'?'reflective':'neutral',
+    cognitiveLoad:difficulty==='Hard'?0.8:difficulty==='Medium'?0.5:0.2,
+    salienceBias:difficulty==='Hard'?0.6:0.3,
+    energyDecay:difficulty==='Hard'?0.5:0.2,
+    audienceAwareness:style==='Casual'?0.5:style==='Professional'?0.3:0.1,
+    experientialDepth:style==='Casual'?0.5:0.2
+  })
   r=cog.run(r)
 
   r=cleanup(r)
