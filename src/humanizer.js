@@ -40,8 +40,7 @@ function t3_transitions(text){
   return r
 }
 
-// ── T4: Sentence Length Variation (medium+) ──
-function t4_sentencevar(sentences){
+function t4_sentencevar(sentences, isHard){
   const r=[...sentences]
   for(let i=0;i<r.length-1;i++){
     const cw=r[i].trim().split(/\s+/).length,nw=r[i+1]?r[i+1].trim().split(/\s+/).length:0
@@ -49,24 +48,49 @@ function t4_sentencevar(sentences){
       const pts=[/,\s*(but|and|so|yet|while|although|because|since)\s/i,/;\s*/,/,\s*which\s/i]
       for(const p of pts){const m=r[i].match(p)
         if(m){const idx=r[i].indexOf(m[0]);if(idx>8&&idx<r[i].length-8){
-          const p1=r[i].substring(0,idx).trim()+'.';let p2=r[i].substring(idx+m[0].length).trim()
-          const conj=m[1]?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
-          p2=conj+(p2[0]||'').toUpperCase()+p2.slice(1)
-          r.splice(i,1,p1,p2);break}}}}
-    if(cw<7&&nw<7&&nw>0&&chance(0.4)){
+          if(m[0].includes(';') && isHard && chance(0.5)){
+            const p1=r[i].substring(0,idx).trim()+' — ';let p2=r[i].substring(idx+m[0].length).trim()
+            p2=(p2[0]||'').toLowerCase()+p2.slice(1)
+            r.splice(i,1,p1+p2)
+          }else{
+            const p1=r[i].substring(0,idx).trim()+'.';let p2=r[i].substring(idx+m[0].length).trim()
+            const conj=m[1]?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
+            p2=conj+(p2[0]||'').toUpperCase()+p2.slice(1)
+            r.splice(i,1,p1,p2)
+          }
+          break}}}}
+    if(isHard && cw<7&&nw<7&&nw>0&&chance(0.4)){
       const merged=r[i].replace(/[.!?]+$/,'')+' — '+r[i+1].trim()[0].toLowerCase()+r[i+1].trim().slice(1)
       r.splice(i,2,merged)}}
   return r
 }
 
-// ── T5: Run-on & Fragment Injection (medium+) ──
-function t5_fragments(sentences){
-  const frags=["Simple as that.","Not ideal.","Worth considering.","Big difference.","Exactly.","Fair enough.","No question.","Not even close.","A real shift.","That matters.","Key point.","Think about it."]
-  const r=[...sentences]
-  const targetCount=Math.max(1,Math.floor(r.length*0.12))
-  for(let n=0;n<targetCount&&r.length>3;n++){
-    const idx=Math.floor(Math.random()*(r.length-2))+1
-    r.splice(idx,0,' '+pick(frags))}
+// ── Unified Quirks: Fragments, Pragmatic, Cognitive, Memory, Digressions, Idioms ──
+const FRAGS=["Simple as that.","Not ideal.","Worth considering.","Big difference.","Exactly.","Fair enough.","No question.","Not even close.","A real shift.","That matters.","Key point.","Think about it."]
+const PRAG_INSERTS=["Anyway,","Honestly,","By the way,","You know,","That said,","Come to think of it,","Look,","Mind you,","Granted,","Admittedly,","The thing is,","Here's the deal,"]
+const COG_TRANSITIONS=["That got me thinking...","What's interesting here is","The odd part is","At first this seems","Here's where it gets interesting:","Which brings up another point:","Now here's the thing:","This is where it gets tricky:"]
+const MEM_ANCHORS=["in one project I worked on,","I remember running into this,","a weird thing I noticed was","the first time I tried this,","if I remember correctly,","roughly speaking,","something along those lines,","from what I've seen,","in my experience,","now that I think about it,"]
+const DIGRESSIONS=["One unexpected side effect of this was how it changed the whole approach.","I once ran into a case where this backfired completely.","An odd exception to this rule popped up in practice.","Side note, this almost never works the way textbooks describe it.","There's a funny story here but I'll save it for another time."]
+const CONTEXT_IDIOMS=["at the end of the day","to put it bluntly","in a nutshell","when push comes to shove","for what it's worth","the bottom line is","all things considered","no two ways about it"]
+
+function t_quirks(sentences, style, isHard){
+  const r=[...sentences];let wc=250
+  for(let i=1;i<r.length;i++){
+    wc+=r[i].split(/\s+/).length
+    if(wc>=250){
+      const opts=['t5','t8'];
+      if(style!=='Academic')opts.push('t7','t14');
+      if(isHard)opts.push('t9','t10');
+      const choice=pick(opts);
+      if(choice==='t5'){r.splice(i+1,0,' '+pick(FRAGS));i++}
+      else if(choice==='t8'){const s=r[i].trim();r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1)}
+      else if(choice==='t7'){const s=r[i].trim();r[i]=' '+pick(PRAG_INSERTS)+' '+s[0].toLowerCase()+s.slice(1)}
+      else if(choice==='t14'){const s=r[i].trim();r[i]=' '+pick(CONTEXT_IDIOMS)+', '+s[0].toLowerCase()+s.slice(1)}
+      else if(choice==='t9'){const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS)+' '+s[0].toLowerCase()+s.slice(1)}
+      else if(choice==='t10'){r.splice(i+1,0,' '+pick(DIGRESSIONS)+' Anyway, back to the main point.');i++}
+      wc=0
+    }
+  }
   return r
 }
 
@@ -78,44 +102,6 @@ function t6_dysfluency(sentences){
     const d=pick(DYSFLUENCIES);const words=r[i].trim().split(/\s+/)
     const pos=Math.floor(words.length*0.3)+1;words.splice(pos,0,d)
     r[i]=' '+words.join(' ')}})
-  return r
-}
-
-// ── T7: Pragmatic Marker Insertion (medium+) ──
-const PRAG_INSERTS=["Anyway,","Honestly,","By the way,","You know,","That said,","Come to think of it,","Look,","Mind you,","Granted,","Admittedly,","The thing is,","Here's the deal —"]
-function t7_pragmatic(sentences,style){
-  if(style==='Academic')return sentences
-  const r=[...sentences];const rate=0.08
-  for(let i=1;i<r.length;i++){if(chance(rate)){
-    const s=r[i].trim();r[i]=' '+pick(PRAG_INSERTS)+' '+s[0].toLowerCase()+s.slice(1)}}
-  return r
-}
-
-// ── T8: Cognitive Transition Replacement (medium+) ──
-const COG_TRANSITIONS=["That got me thinking...","What's interesting here is","The odd part is","At first this seems","Here's where it gets interesting —","Which brings up another point —","Now here's the thing —","This is where it gets tricky —"]
-function t8_cognitive(sentences){
-  const r=[...sentences];let inserted=0
-  for(let i=2;i<r.length-1;i+=Math.floor(r.length/3)){
-    if(inserted<2){const s=r[i].trim()
-      r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1);inserted++}}
-  return r
-}
-
-// ── T9: Memory Anchor Injection (hard) ──
-const MEM_ANCHORS=["in one project I worked on,","I remember running into this —","a weird thing I noticed was","the first time I tried this,","if I remember correctly,","roughly speaking,","something along those lines —","from what I've seen,","in my experience,","now that I think about it,"]
-function t9_memanchors(sentences){
-  const r=[...sentences];let wc=0
-  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
-    if(wc>=300){const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS)+' '+s[0].toLowerCase()+s.slice(1);wc=0}}
-  return r
-}
-
-// ── T10: Micro-Digression (hard) ──
-const DIGRESSIONS=["One unexpected side effect of this was how it changed the whole approach.","I once ran into a case where this backfired completely.","An odd exception to this rule popped up in practice.","Side note — this almost never works the way textbooks describe it.","There's a funny story here but I'll save it for another time."]
-function t10_digression(sentences){
-  if(sentences.length<10)return sentences
-  const r=[...sentences];const pos=Math.floor(r.length*0.6)
-  r.splice(pos,0,' '+pick(DIGRESSIONS)+' Anyway, back to the main point —')
   return r
 }
 
@@ -141,15 +127,6 @@ function t13_collocations(text){
   let r=text;Object.entries(UNNATURAL_COLLOCATIONS).sort((a,b)=>b[0].length-a[0].length).forEach(([from,to])=>{
     const rx=new RegExp(`\\b${escRx(from)}\\b`,'gi')
     r=r.replace(rx,m=>{if(m[0]===m[0].toUpperCase())return to[0].toUpperCase()+to.slice(1);return to})})
-  return r
-}
-
-// ── T14: Idiom Injection (medium+) ──
-function t14_idioms(sentences){
-  const r=[...sentences];let wc=0
-  const contextIdioms=["at the end of the day","to put it bluntly","in a nutshell","when push comes to shove","for what it's worth","the bottom line is","all things considered","no two ways about it"]
-  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
-    if(wc>=400){const s=r[i].trim();r[i]=' '+pick(contextIdioms)+', '+s[0].toLowerCase()+s.slice(1);wc=0}}
   return r
 }
 
@@ -265,12 +242,9 @@ function processChunk(text,style,difficulty){
   // Medium + Hard transforms
   if(isMedium||isHard){
     let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
-    sents=t4_sentencevar(sents)         // T4
-    sents=t5_fragments(sents)           // T5
+    sents=t4_sentencevar(sents, isHard)         // T4
+    sents=t_quirks(sents, style, isHard)        // Unified quirks
     sents=t6_dysfluency(sents)          // T6
-    sents=t7_pragmatic(sents,style)     // T7
-    sents=t8_cognitive(sents)           // T8
-    sents=t14_idioms(sents)             // T14
     sents=t15_temporal(sents)           // T15
     sents=t17_rhymedisrupt(sents)       // T17
     r=sents.join(' ')
@@ -287,13 +261,9 @@ function processChunk(text,style,difficulty){
   // Hard-only transforms
   if(isHard){
     let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
-    sents=t9_memanchors(sents)          // T9
     sents=t12_uncertainty(sents)        // T12
     sents=t16_redundancy(sents)         // T16
     r=sents.join(' ')
-    // T10: Micro-digression
-    const dsents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
-    r=t10_digression(dsents).join(' ')
     // T11: Incomplete enumeration
     r=t11_enumeration(r)
     // T18: Asymmetric detail
