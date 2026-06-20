@@ -423,6 +423,86 @@ body {
   max-height: 460px;
   color: var(--text);
   animation: fadeInUp 0.3s ease;
+  position: relative;
+}
+
+.output-text[contenteditable="true"] {
+  min-height: 300px;
+  outline: none;
+}
+.output-text[contenteditable="true"]:empty:before {
+  content: attr(placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.output-hint {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Rich Text Formatting Styles */
+.output-text ul { list-style: disc; padding-left: 20px; margin: 8px 0; }
+.output-text ol { list-style: decimal; padding-left: 20px; margin: 8px 0; }
+.output-text li { margin: 4px 0; line-height: 1.6; }
+.output-text blockquote { border-left: 3px solid #6366f1; padding-left: 12px; color: #a1a1aa; margin: 8px 0; }
+.output-text h1 { font-size: 24px; font-weight: 700; margin: 12px 0 6px; }
+.output-text h2 { font-size: 20px; font-weight: 600; margin: 10px 0 5px; }
+.output-text h3 { font-size: 16px; font-weight: 600; margin: 8px 0 4px; }
+
+/* RTF Toolbar */
+.rtf-toolbar {
+  background: #111111;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  animation: fadeInUp 0.3s ease;
+}
+
+.rtf-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-sec);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  padding: 0;
+}
+.rtf-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--text);
+}
+.rtf-btn.active {
+  background: rgba(99, 102, 241, 0.3);
+  color: #fff;
+}
+.rtf-btn.text-btn {
+  width: auto;
+  padding: 0 8px;
+  font-weight: 500;
+}
+
+.rtf-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 4px;
 }
 
 @keyframes fadeInUp {

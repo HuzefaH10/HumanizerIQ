@@ -63,9 +63,71 @@ export default function App(){
   const[humanizeNote,setHumanizeNote]=useState(null)
   const[detectResult,setDetectResult]=useState(null)
   const[copied,setCopied]=useState(false)
-  const humanizeBtnRef=useRef(null),detectBtnRef=useRef(null),sliderRef=useRef(null)
+  
+  const[formatState,setFormatState]=useState({
+    bold:false,italic:false,underline:false,strikeThrough:false,
+    h1:false,h2:false,h3:false,ul:false,ol:false,blockquote:false
+  })
+
+  const humanizeBtnRef=useRef(null),detectBtnRef=useRef(null),sliderRef=useRef(null),outputRef=useRef(null)
   const words=countWords(inputText),overLimit=words>MAX_WORDS
   const animatedScore=useAnimatedCounter(detectResult?.score||0)
+
+  const updateFormatState=useCallback(()=>{
+    setFormatState({
+      bold:document.queryCommandState('bold'),
+      italic:document.queryCommandState('italic'),
+      underline:document.queryCommandState('underline'),
+      strikeThrough:document.queryCommandState('strikeThrough'),
+      h1:document.queryCommandValue('formatBlock')==='h1',
+      h2:document.queryCommandValue('formatBlock')==='h2',
+      h3:document.queryCommandValue('formatBlock')==='h3',
+      ul:document.queryCommandState('insertUnorderedList'),
+      ol:document.queryCommandState('insertOrderedList'),
+      blockquote:document.queryCommandValue('formatBlock')==='blockquote'
+    })
+  },[])
+
+  useEffect(()=>{
+    const handleSelectionChange=()=>{
+      if(document.activeElement===outputRef.current) updateFormatState()
+    }
+    document.addEventListener('selectionchange',handleSelectionChange)
+    return ()=>document.removeEventListener('selectionchange',handleSelectionChange)
+  },[updateFormatState])
+
+  const execCmd=(cmd,val=null)=>{
+    if(cmd==='formatBlock'&&val==='BLOCKQUOTE'){
+      // custom blockquote wrap
+      document.execCommand('formatBlock',false,'BLOCKQUOTE')
+    }else{
+      document.execCommand(cmd,false,val)
+    }
+    outputRef.current?.focus()
+    updateFormatState()
+  }
+
+  const handleCopyPlain=()=>{
+    if(!outputRef.current)return
+    navigator.clipboard.writeText(outputRef.current.innerText).then(()=>{
+      setCopied(true);setTimeout(()=>setCopied(false),2000)
+    })
+  }
+
+  const handleCopyFormatted=async()=>{
+    if(!outputRef.current)return
+    try{
+      const html=outputRef.current.innerHTML
+      const blobHtml=new Blob([html],{type:'text/html'})
+      const blobText=new Blob([outputRef.current.innerText],{type:'text/plain'})
+      const item=new ClipboardItem({'text/html':blobHtml,'text/plain':blobText})
+      await navigator.clipboard.write([item])
+      setCopied(true);setTimeout(()=>setCopied(false),2000)
+    }catch(e){
+      console.error(e)
+      handleCopyPlain()
+    }
+  }
 
   useEffect(()=>{
     const btn=mode==='humanize'?humanizeBtnRef.current:detectBtnRef.current
@@ -156,14 +218,36 @@ export default function App(){
       <div className="panel">
         <div className="panel-header">
           <div className="panel-title"><FileText size={14}/>{mode==='humanize'?'Humanized Output':'Detection Results'}</div>
-          {hasOutput&&<button className={`copy-output-btn ${copied?'copied':''}`} onClick={handleCopy}>
+          {mode==='detect'&&hasOutput&&<button className={`copy-output-btn ${copied?'copied':''}`} onClick={handleCopy}>
             {copied?<Check size={14}/>:<Copy size={14}/>}{copied?'Copied!':'Copy'}</button>}
         </div>
         {error&&<div className="error-banner"><AlertCircle size={16}/>{error}</div>}
         <div className="output-area">
           {mode==='humanize'&&(humanizedText?<>
+            <div className="rtf-toolbar">
+              <button className={`rtf-btn ${formatState.bold?'active':''}`} onClick={()=>execCmd('bold')} style={{fontWeight:'bold'}}>B</button>
+              <button className={`rtf-btn ${formatState.italic?'active':''}`} onClick={()=>execCmd('italic')} style={{fontStyle:'italic'}}>I</button>
+              <button className={`rtf-btn ${formatState.underline?'active':''}`} onClick={()=>execCmd('underline')} style={{textDecoration:'underline'}}>U</button>
+              <button className={`rtf-btn ${formatState.strikeThrough?'active':''}`} onClick={()=>execCmd('strikeThrough')} style={{textDecoration:'line-through'}}>S</button>
+              <div className="rtf-divider"/>
+              <button className={`rtf-btn text-btn ${formatState.h1?'active':''}`} onClick={()=>execCmd('formatBlock','H1')}>H1</button>
+              <button className={`rtf-btn text-btn ${formatState.h2?'active':''}`} onClick={()=>execCmd('formatBlock','H2')}>H2</button>
+              <button className={`rtf-btn text-btn ${formatState.h3?'active':''}`} onClick={()=>execCmd('formatBlock','H3')}>H3</button>
+              <button className="rtf-btn text-btn" onClick={()=>execCmd('formatBlock','P')}>Body</button>
+              <div className="rtf-divider"/>
+              <button className={`rtf-btn ${formatState.ul?'active':''}`} onClick={()=>execCmd('insertUnorderedList')}>•</button>
+              <button className={`rtf-btn ${formatState.ol?'active':''}`} onClick={()=>execCmd('insertOrderedList')}>1.</button>
+              <button className={`rtf-btn ${formatState.blockquote?'active':''}`} onClick={()=>execCmd('formatBlock','BLOCKQUOTE')}>"</button>
+              <div className="rtf-divider" style={{marginLeft:'auto'}}/>
+              <button className="rtf-btn text-btn" onClick={()=>execCmd('removeFormat')}>Clear</button>
+              <button className="rtf-btn text-btn" onClick={handleCopyPlain}>{copied?'Copied!':'Copy Plain'}</button>
+              <button className="rtf-btn text-btn" onClick={handleCopyFormatted}>{copied?'Copied!':'Copy HTML'}</button>
+            </div>
             {humanizeNote&&<div className={humanizeNote.type==='warning'?'warning-banner':'info-banner'}><Info size={16}/>{humanizeNote.text}</div>}
-            <div className="output-text">{humanizedText}</div>
+            <div ref={outputRef} className="output-text" contentEditable={true} suppressContentEditableWarning={true}
+                 onKeyUp={updateFormatState} onMouseUp={updateFormatState}
+                 dangerouslySetInnerHTML={{__html:escHtml(humanizedText).replace(/\n\n/g,'<br><br>')}} />
+            <div className="output-hint">Click to edit</div>
           </>:!loading&&!error&&<div className="output-placeholder"><Sparkles size={48}/>
             <p>Paste AI-generated text on the left,<br/>choose your style &amp; difficulty,<br/>then click <strong>Humanize</strong>.</p></div>)}
 
