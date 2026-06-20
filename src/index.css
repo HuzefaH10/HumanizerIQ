@@ -226,14 +226,12 @@ body {
   width: 100%;
   min-height: 260px;
   resize: none;
-  background: var(--bg);
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: #1c1c28;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  box-shadow: 
-    0 0 0 1px rgba(99, 102, 241, 0.1),
-    0 0 20px rgba(99, 102, 241, 0.12),
-    0 0 40px rgba(99, 102, 241, 0.08),
-    0 0 80px rgba(99, 102, 241, 0.04);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   padding: 16px;
   color: var(--text);
   font-family: 'Inter', sans-serif;
@@ -424,14 +422,12 @@ body {
 
 .output-text {
   flex: 1;
-  background: var(--bg);
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: #1c1c28;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  box-shadow: 
-    0 0 0 1px rgba(99, 102, 241, 0.1),
-    0 0 20px rgba(99, 102, 241, 0.12),
-    0 0 40px rgba(99, 102, 241, 0.08),
-    0 0 80px rgba(99, 102, 241, 0.04);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   padding: 16px;
   font-size: 14px;
   line-height: 1.7;
