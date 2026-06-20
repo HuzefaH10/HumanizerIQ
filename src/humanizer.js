@@ -410,6 +410,20 @@ function t22_semanticDistance(text) {
   return result
 }
 
+// ── T23: Paragraph Reordering (hard) ──
+function t23_paragraphReorder(paragraphs) {
+  if (paragraphs.length < 3) return paragraphs
+  // Never reorder first or last paragraph — too disorienting
+  const middle = paragraphs.slice(1, -1)
+  for (let i = middle.length - 1; i > 0; i--) {
+    if (Math.random() < 0.4) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [middle[i], middle[j]] = [middle[j], middle[i]]
+    }
+  }
+  return [paragraphs[0], ...middle, paragraphs[paragraphs.length - 1]]
+}
+
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
@@ -577,7 +591,8 @@ function processChunk(text,style,difficulty,docState){
 
     // Asymmetric detail distribution (all styles)
     const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
-    r=t18_asymmetric(paras, docState).join('\n\n')
+    const reordered=t23_paragraphReorder(t18_asymmetric(paras, docState))
+    r=reordered.join('\n\n')
 
     // Oxford comma inconsistency (Professional + Casual)
     if(!isAcademic) r=t19_oxfordcomma(r)
