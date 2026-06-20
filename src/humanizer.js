@@ -9,7 +9,7 @@ function chance(pct){return Math.random()<pct}
 // ── Protected Zones (code, URLs, quotes, numbers) ──
 function extractProtected(text){
   const zones=[];let c=text
-  const rx=/```[\s\S]*?```|`[^`]+`|<code>[\s\S]*?<\/code>|https?:\/\/[^\s)>\]]+|"[^"]{4,}"|[$€£¥]?\d[\d,.]*\s*(?:%|percent|million|billion|thousand)?/gi
+  const rx=/```[\s\S]*?```|`[^`]+`|<code>[\s\S]*?<\/code>|https?:\/\/[^\s)>\]]+|[$€£¥]?\d[\d,.]*\s*(?:%|percent|million|billion|thousand)?/gi
   c=c.replace(rx,m=>{const ph=`⟦P${zones.length}⟧`;zones.push(m);return ph})
   return{cleaned:c,zones}
 }
