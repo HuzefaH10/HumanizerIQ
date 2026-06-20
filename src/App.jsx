@@ -1,5 +1,5 @@
 import{useState,useRef,useEffect,useCallback}from'react'
-import{Wand2,ScanSearch,Type,Copy,Check,Trash2,ArrowLeft,AlertCircle,FileText,Sparkles,ChevronRight,Info}from'lucide-react'
+import{Wand2,ScanSearch,Type,Copy,Check,Trash2,ArrowLeft,AlertCircle,FileText,Sparkles,ChevronRight,Info,Clock}from'lucide-react'
 import{runDetection}from'./detector'
 import{runHumanizer}from'./humanizer'
 import{HIGHLIGHT_COLORS}from'./engine-data'
@@ -64,6 +64,18 @@ export default function App(){
   const[detectResult,setDetectResult]=useState(null)
   const[copied,setCopied]=useState(false)
   const[outputWords,setOutputWords]=useState(0)
+  const[history,setHistory]=useState(()=>{
+    try{const h=sessionStorage.getItem('humanizer_history');return h?JSON.parse(h):[]}catch{return[]}
+  })
+  const[showHistory,setShowHistory]=useState(false)
+
+  useEffect(()=>{
+    const handleClickOutside=(e)=>{
+      if(!e.target.closest('.history-wrapper')) setShowHistory(false);
+    };
+    if(showHistory) document.addEventListener('click',handleClickOutside);
+    return()=>document.removeEventListener('click',handleClickOutside);
+  },[showHistory])
   
   const[formatState,setFormatState]=useState({
     bold:false,italic:false,underline:false,strikeThrough:false,
@@ -148,6 +160,12 @@ export default function App(){
       const{result,note,warning}=runHumanizer(txt,style,difficulty)
       setHumanizedText(result)
       setOutputWords(countWords(result))
+      const newEntry = { id: Date.now(), timestamp: Date.now(), inputText: txt, outputText: result, style, difficulty };
+      setHistory(prev => {
+        const next = [newEntry, ...prev].slice(0, 3);
+        sessionStorage.setItem('humanizer_history', JSON.stringify(next));
+        return next;
+      });
       if(warning)setHumanizeNote({type:'warning',text:warning})
       else if(note)setHumanizeNote({type:'note',text:note})
     }catch(e){setError(e.message)}finally{setLoading(false)}},0)
@@ -239,10 +257,45 @@ export default function App(){
       </div>
 
       <div className="panel">
-        <div className="panel-header">
+        <div className="panel-header" style={{ position: 'relative' }}>
           <div className="panel-title"><FileText size={14}/>{mode==='humanize'?'Humanized Output':'Detection Results'}</div>
-          {mode==='detect'&&hasOutput&&<button className={`copy-output-btn ${copied?'copied':''}`} onClick={handleCopy}>
-            {copied?<Check size={14}/>:<Copy size={14}/>}{copied?'Copied!':'Copy'}</button>}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {mode==='humanize' && (
+              <div className="history-wrapper" style={{ position: 'relative' }}>
+                <button className="copy-output-btn" onClick={() => setShowHistory(!showHistory)}>
+                  <Clock size={14}/>History ({history.length})
+                </button>
+                {showHistory && (
+                  <div className="history-dropdown">
+                    <div style={{ marginBottom: '8px', fontWeight: '600', fontSize: '13px', color: 'var(--text)' }}>Recent Generations</div>
+                    {history.length === 0 ? <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No history yet.</div> : history.map((entry) => (
+                      <div key={entry.id} className="history-item">
+                        <div className="history-item-header">
+                          <span className="history-item-badges">
+                            <span className="history-badge">{entry.style}</span>
+                            <span className="history-badge">{entry.difficulty}</span>
+                          </span>
+                          <span className="history-time">{Math.max(0, Math.floor((Date.now() - entry.timestamp) / 60000))}m ago</span>
+                        </div>
+                        <div className="history-preview">{entry.outputText.slice(0, 80)}...</div>
+                        <button className="action-btn" style={{ width: '100%', marginTop: '8px', justifyContent: 'center' }} onClick={() => {
+                          setHumanizedText(entry.outputText);
+                          setInputText(entry.inputText);
+                          setStyle(entry.style);
+                          setDifficulty(entry.difficulty);
+                          setOutputWords(countWords(entry.outputText));
+                          setShowHistory(false);
+                        }}>Restore</button>
+                      </div>
+                    ))}
+                    {history.length > 0 && <button className="clear-history-btn" onClick={() => { setHistory([]); sessionStorage.removeItem('humanizer_history'); }}>Clear History</button>}
+                  </div>
+                )}
+              </div>
+            )}
+            {mode==='detect'&&hasOutput&&<button className={`copy-output-btn ${copied?'copied':''}`} onClick={handleCopy}>
+              {copied?<Check size={14}/>:<Copy size={14}/>}{copied?'Copied!':'Copy'}</button>}
+          </div>
         </div>
         {error&&<div className="error-banner"><AlertCircle size={16}/>{error}</div>}
         <div className="output-area">
