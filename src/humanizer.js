@@ -75,10 +75,12 @@ const CONTEXT_IDIOMS=["at the end of the day","to put it bluntly","in a nutshell
 
 function t_quirks(sentences, style, isHard){
   const r=[...sentences];let wc=250
+  const totalWordCount=r.join(' ').trim().split(/\s+/).length
   for(let i=1;i<r.length;i++){
     wc+=r[i].split(/\s+/).length
     if(wc>=250){
-      const opts=['t5','t8'];
+      const opts=['t8'];
+      if(totalWordCount>=200)opts.push('t5');
       if(style!=='Academic')opts.push('t7','t14');
       if(isHard)opts.push('t9','t10');
       const choice=pick(opts);
@@ -194,11 +196,12 @@ function t20_emdash(text){
 
 // ── Cleanup ──
 function cleanup(text){
-  return text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
+  let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
     .replace(/([.!?])([A-Z])/g,'$1 $2').replace(/\.{2,}/g,'.').replace(/,\s*,/g,',')
     .replace(/([.!?])\s+([a-z])/g,(_,p,l)=>p+' '+l.toUpperCase())
     .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
     .replace(/\n{3,}/g,'\n\n').trim()
+  return result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.')
 }
 
 // ── Chunker ──
