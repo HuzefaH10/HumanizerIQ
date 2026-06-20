@@ -237,6 +237,94 @@ function t20_emdash(text){
   return text.replace(/\s*—\s*/g,()=>chance(0.5)?' — ':'—')
 }
 
+// ── T21: Structural Skeleton Breaker (medium+) ──
+const SKELETON_FLIPS = [
+  // Active → Passive restructure
+  {
+    pattern: /(\w+(?:\s\w+)?)\s+(?:must|should|can)\s+(\w+)\s+(.+)/i,
+    transform: (s, subject, verb, object) =>
+      `${object} ${verb}ing is something ${subject} really need${subject.endsWith('s') ? '' : 's'} to prioritize`
+  },
+  // Statement → Question → Answer
+  {
+    pattern: /^(.+)\s+is\s+(?:crucial|important|essential|critical)\s+(?:for|to)\s+(.+)\.$/i,
+    transform: (s, thing, context) =>
+      `Why does ${thing} matter for ${context}? Honestly, more than most people realize.`
+  },
+  // Noun-first → Verb-first
+  {
+    pattern: /^(The\s+\w+(?:\s+\w+)?)\s+(enables?|allows?|helps?)\s+(.+)\.$/i,
+    transform: (s, noun, verb, rest) =>
+      `What ${noun} actually does is ${verb.replace(/s$/, '')} ${rest} — which matters more than people think.`
+  },
+  // Long formal → Split informal
+  {
+    pattern: /^(.{40,}),\s+(?:while|although|whereas)\s+(.{20,})\.$/i,
+    transform: (s, part1, part2) =>
+      `${part1}. ${part2.charAt(0).toUpperCase() + part2.slice(1)} — those two things don't always go together.`
+  },
+  // "It is X that Y" → "Y, and that's what makes it X"
+  {
+    pattern: /^It is (\w+) (?:that|to note that) (.+)\.$/i,
+    transform: (s, adj, clause) =>
+      `${clause.charAt(0).toUpperCase() + clause.slice(1)}, and that's what makes this ${adj}.`
+  },
+  // Flip cause-effect order
+  {
+    pattern: /^(.+)\s+(?:enables?|allows?|helps?)\s+(.+)\s+to\s+(.+)\.$/i,
+    transform: (s, cause, subject, effect) =>
+      `${subject.charAt(0).toUpperCase() + subject.slice(1)} can ${effect} — that's the whole point of ${cause}.`
+  },
+  // Convert list sentence to flowing prose
+  {
+    pattern: /^(.+),\s+(.+),\s+and\s+(.+)\.$/i,
+    transform: (s, a, b, c) =>
+      `${a}. ${b.charAt(0).toUpperCase() + b.slice(1)} too. ${c.charAt(0).toUpperCase() + c.slice(1)} as well, though that one gets less attention.`
+  },
+  // Nominalization → verb-centric
+  {
+    pattern: /\bthe (\w+tion|\w+ment|\w+ance|\w+ence)\s+of\b/gi,
+    isInline: true,
+    transform: (match, noun) => {
+      const verbMap = {
+        'implementation': 'implementing', 'integration': 'integrating',
+        'adoption': 'adopting', 'consideration': 'considering',
+        'development': 'developing', 'management': 'managing',
+        'enhancement': 'enhancing', 'improvement': 'improving',
+        'utilization': 'using', 'optimization': 'optimizing',
+        'evaluation': 'evaluating', 'transformation': 'transforming',
+        'establishment': 'establishing', 'advancement': 'advancing',
+        'engagement': 'engaging', 'maintenance': 'maintaining',
+        'achievement': 'achieving', 'assessment': 'assessing',
+        'alignment': 'aligning', 'deployment': 'deploying'
+      }
+      return verbMap[noun.toLowerCase()] ? `actually ${verbMap[noun.toLowerCase()]}` : match
+    }
+  }
+]
+
+function t21_skeletonBreaker(sentences, difficulty) {
+  if (difficulty === 'Easy') return sentences
+  const flipProb = difficulty === 'Hard' ? 0.35 : 0.2
+  return sentences.map(sentence => {
+    if (Math.random() > flipProb) return sentence
+    // Try inline replacements first (nominalization pattern)
+    let modified = sentence
+    for (const flip of SKELETON_FLIPS) {
+      if (flip.isInline) {
+        modified = modified.replace(flip.pattern, flip.transform)
+        if (modified !== sentence) return modified
+        continue
+      }
+      const match = sentence.match(flip.pattern)
+      if (match) {
+        try { return flip.transform(...match) } catch(e) { continue }
+      }
+    }
+    return sentence
+  })
+}
+
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
@@ -328,6 +416,9 @@ function processChunk(text,style,difficulty,docState){
   // ── MEDIUM + HARD ──
   if(isMedium||isHard){
     let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
+
+    // Structural skeleton breaking (all styles medium+)
+    sents=t21_skeletonBreaker(sents, difficulty)
 
     // Sentence length variation (all styles)
     sents=t4_sentencevar(sents, isHard)
