@@ -17,7 +17,13 @@ function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 // ── MODULE 1: AI Vocabulary Fingerprint ──
 function m1_vocab(p){
   const flagged=[];let raw=0
-  AI_VOCAB.forEach(w=>{const rx=new RegExp(`\\b${escRx(w)}\\b`,'gi');[...p.text.matchAll(rx)].forEach(m=>{raw+=2;flagged.push({text:m[0],idx:m.index,type:'vocab',reason:`AI word: "${w}"`})})})
+  AI_VOCAB.forEach(w=>{
+    if(w.includes(' ')||w.includes('-')){
+      let i=p.lc.indexOf(w);while(i!==-1){raw+=2;flagged.push({text:p.text.substring(i,i+w.length),idx:i,type:'vocab',reason:`AI word: "${w}"`});i=p.lc.indexOf(w,i+1)}
+    }else{
+      const rx=new RegExp(`\\b${escRx(w)}\\b`,'gi');[...p.text.matchAll(rx)].forEach(m=>{raw+=2;flagged.push({text:m[0],idx:m.index,type:'vocab',reason:`AI word: "${w}"`})})
+    }
+  })
   AI_PHRASES.forEach(ph=>{let i=p.lc.indexOf(ph);while(i!==-1){raw+=3;flagged.push({text:p.text.substring(i,i+ph.length),idx:i,type:'vocab',reason:`AI phrase: "${ph}"`});i=p.lc.indexOf(ph,i+1)}})
   return{score:clamp(p.wc>0?raw/(p.wc*0.15):0),flagged,detail:`${flagged.length} AI vocab hits`}
 }
@@ -280,7 +286,10 @@ export function runDetection(text){
   for(const k in WEIGHTS)ensemble+=sub[k]*WEIGHTS[k]
   // Blend: 60% deep subscores + 40% surface signals
   const blended=ensemble*0.6+surfaceScore*0.4
-  const finalScore=Math.min(Math.round(blended*120),100)
+  let finalScore=Math.min(Math.round(blended*120),100)
+  
+  const vocabHits = r.m1.flagged.length;
+  if(vocabHits >= 3) finalScore = Math.max(finalScore, 35);
 
   // Verdicts
   let verdict,color
