@@ -201,7 +201,7 @@ function cleanup(text){
     .replace(/([.!?])\s+([a-z])/g,(_,p,l)=>p+' '+l.toUpperCase())
     .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
     .replace(/\n{3,}/g,'\n\n').trim()
-  return result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.')
+  return result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.').replace(/\ba ([aeiouAEIOU])/g, 'an $1')
 }
 
 // ── Chunker ──

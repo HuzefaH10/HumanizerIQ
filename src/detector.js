@@ -3,7 +3,7 @@ import{AI_VOCAB,AI_PHRASES,TRANSITIONS,CONTRACTION_PAIRS,PASSIVE_RE,HEDGING,FORM
 
 // ── Preprocessing (shared, computed once) ──
 function preprocess(text){
-  const sentences=(text.match(/[^.!?]+[.!?]+/g)||[]).map(s=>s.trim()).filter(s=>s.length>0)
+  const sentences=(text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[]).map(s=>s.trim()).filter(s=>s.length>0)
   const words=text.toLowerCase().match(/\b[a-z']+\b/g)||[]
   const paragraphs=text.split(/\n\n+/).filter(p=>p.trim().length>0)
   const lc=text.toLowerCase()
@@ -45,7 +45,7 @@ function m3_rhythm(p){
   for(let i=1;i<L.length;i++){if(Math.abs(L[i]-L[i-1])<=4)cur.push(i);else{if(cur.length>=3)clusters.push([...cur]);cur=[i]}}
   if(cur.length>=3)clusters.push(cur)
   const flagged=[];clusters.forEach(c=>c.forEach(i=>flagged.push({text:p.sentences[i],type:'rhythm',reason:`Uniform length cluster (σ=${std.toFixed(1)})`})))
-  const s1=std<5?0.6:std<8?0.3:0,s2=clusters.length*0.16
+  const s1=std<4?0.30:std<7?0.15:0,s2=clusters.length*0.16
   return{score:clamp(s1+s2),flagged,detail:`σ=${std.toFixed(1)}, ${clusters.length} clusters`}
 }
 
