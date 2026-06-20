@@ -234,7 +234,13 @@ function cleanup(text){
     .replace(/([.!?])\s+([a-z])/g,(_,p,l)=>p+' '+l.toUpperCase())
     .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
     .replace(/\n{3,}/g,'\n\n').trim()
-  return result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.').replace(/\ba ([aeiouAEIOU])/g, 'an $1')
+  result = result.replace(/([.!?])\s*,/g, '$1').replace(/,\s*\./g, '.').replace(/\.+/g, '.').replace(/\ba ([aeiouAEIOU])/g, 'an $1')
+  // Dedup adjacent injections
+  result = result.replace(/(As it turns out|Roughly speaking|Honestly|Also|And|But)[,.]?\s+(As it turns out|Roughly speaking|Honestly|Also|And|But)[,.]?\s+/gi, '$2 ')
+  // Restore paragraph breaks every 4-5 sentences to prevent wall-of-text
+  let sentenceCount = 0
+  result = result.replace(/(\. )(?=[A-Z])/g, (m) => { sentenceCount++; return sentenceCount % 5 === 0 ? '.\n\n' : m })
+  return result
 }
 
 // ── Chunker ──

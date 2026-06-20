@@ -281,7 +281,7 @@ function goalFirstModeling(paragraphs, config) {
     justify:    ['because', 'reason', 'therefore', 'which is why', 'this is why']
   }
 
-  return paragraphs.map(para => {
+  return paragraphs.map((para, idx) => {
     const lower = para.toLowerCase()
     let detectedGoal = 'explain'
     let maxSignals = 0
@@ -294,7 +294,7 @@ function goalFirstModeling(paragraphs, config) {
     if (detectedGoal === 'warn' && Math.random() < 0.4) {
       return para + ' Seriously, don\'t skip this part.'
     }
-    if (detectedGoal === 'persuade' && Math.random() < 0.3) {
+    if (detectedGoal === 'persuade' && Math.random() < 0.3 && idx > 0) {
       return 'Here\'s the thing — ' + para.charAt(0).toLowerCase() + para.slice(1)
     }
 
