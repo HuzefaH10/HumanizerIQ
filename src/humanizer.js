@@ -460,6 +460,42 @@ function t24_lengthDivergence(sentences, inputWordCount, docState) {
   return sentences
 }
 
+// ── T25: Clause Inversion Engine (medium+) ──
+const CLAUSE_INVERSIONS = [
+  // "While X, Y" → "Y, though X is also true"
+  [/^While (.+?),\s+(.+)\.$/i,
+   (m, x, y) => `${y.charAt(0).toUpperCase() + y.slice(1)}, though ${x} is also worth keeping in mind.`],
+
+  // "Although X, Y" → "Y — even though X"
+  [/^Although (.+?),\s+(.+)\.$/i,
+   (m, x, y) => `${y.charAt(0).toUpperCase() + y.slice(1)} — even though ${x}.`],
+
+  // "X, which Y" → "X. That Y."
+  [/^(.+),\s+which\s+(.+)\.$/i,
+   (m, x, y) => `${x}. That ${y}.`],
+
+  // "In order to X, Y must Z" → "Y needs to Z if the goal is to X"
+  [/^In order to (.+?),\s+(.+?)\s+must\s+(.+)\.$/i,
+   (m, goal, subject, action) => `${subject.charAt(0).toUpperCase() + subject.slice(1)} needs to ${action} if the goal is to ${goal}.`],
+
+  // "X enables Y to Z" → "Z becomes possible when X is in place"
+  [/^(.+?)\s+enables?\s+(.+?)\s+to\s+(.+)\.$/i,
+   (m, enabler, subject, action) => `${action.charAt(0).toUpperCase() + action.slice(1)} becomes a lot more realistic when ${enabler} is actually working.`]
+]
+
+function t25_clauseInversion(sentences, difficulty) {
+  if (difficulty === 'Easy') return sentences
+  const probability = difficulty === 'Hard' ? 0.3 : 0.15
+  return sentences.map(sentence => {
+    if (Math.random() > probability) return sentence
+    for (const [pattern, transform] of CLAUSE_INVERSIONS) {
+      const match = sentence.match(pattern)
+      if (match) return transform(...match)
+    }
+    return sentence
+  })
+}
+
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
@@ -557,6 +593,9 @@ function processChunk(text,style,difficulty,docState){
 
     // Structural skeleton breaking (all styles medium+)
     sents=t21_skeletonBreaker(sents, difficulty)
+
+    // Clause inversion (all styles medium+)
+    sents=t25_clauseInversion(sents, difficulty)
 
     // Sentence length variation (all styles)
     sents=t4_sentencevar(sents, isHard)
