@@ -161,7 +161,9 @@ body {
   border-radius: var(--radius-pill);
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 0;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+  box-shadow:
+    0 0 7px rgba(99, 102, 241, 0.08),
+    0 0 14px rgba(99, 102, 241, 0.03);
   pointer-events: none;
 }
 
@@ -332,6 +334,9 @@ body {
   background: var(--accent-subtle);
   border-color: var(--accent);
   color: var(--accent);
+  box-shadow:
+    0 0 6px rgba(99, 102, 241, 0.05),
+    0 0 12px rgba(99, 102, 241, 0.02);
 }
 
 /* ============== CTA BUTTON ============== */
@@ -352,12 +357,15 @@ body {
   justify-content: center;
   gap: 8px;
   margin-top: auto;
+  box-shadow:
+    0 0 12px rgba(99, 102, 241, 0.06),
+    0 0 24px rgba(99, 102, 241, 0.03),
+    0 0 48px rgba(99, 102, 241, 0.015);
 }
 
 .cta-btn:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
 }
 
 .cta-btn:disabled {
