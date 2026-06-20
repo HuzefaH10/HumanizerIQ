@@ -5,6 +5,7 @@ import{runDetection}from'./detector'
 function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
 function chance(pct){return Math.random()<pct}
+function countWords(text){return text.trim().split(/\s+/).filter(w=>w.length>0).length}
 
 // ── Protected Zones (code, URLs, quotes, numbers) ──
 function extractProtected(text){
@@ -43,7 +44,7 @@ function t3_transitions(text){
 function t4_sentencevar(sentences, isHard){
   const r=[...sentences]
   for(let i=0;i<r.length-1;i++){
-    const cw=r[i].trim().split(/\s+/).length,nw=r[i+1]?r[i+1].trim().split(/\s+/).length:0
+    const cw=countWords(r[i]),nw=r[i+1]?countWords(r[i+1]):0
     if(Math.abs(cw-nw)<5&&cw>15){
       const pts=[/,\s*(but|and|so|yet|while|although|because|since)\s/i,/;\s*/,/,\s*which\s/i]
       for(const p of pts){const m=r[i].match(p)
@@ -75,9 +76,9 @@ const CONTEXT_IDIOMS=["at the end of the day","to put it bluntly","in a nutshell
 
 function t_quirks(sentences, style, isHard, docState){
   const r=[...sentences];let wc=250
-  const totalWordCount=r.join(' ').trim().split(/\s+/).length
+  const totalWordCount=countWords(r.join(' '))
   for(let i=1;i<r.length;i++){
-    wc+=r[i].split(/\s+/).length
+    wc+=countWords(r[i])
     if(wc>=250){
       const opts=[];
       if(!docState.cogUsed)opts.push('t8');
@@ -103,7 +104,7 @@ function t_quirks(sentences, style, isHard, docState){
 const DYSFLUENCIES=["actually","I mean","well","to be fair","sort of","pretty much","kind of","or something like that","in a way","more or less"]
 function t6_dysfluency(sentences){
   const r=[...sentences];const rate=0.02
-  r.forEach((_,i)=>{if(chance(rate)&&r[i].trim().split(/\s+/).length>6){
+  r.forEach((_,i)=>{if(chance(rate)&&countWords(r[i])>6){
     const d=pick(DYSFLUENCIES);const words=r[i].trim().split(/\s+/)
     const pos=Math.floor(words.length*0.3)+1;words.splice(pos,0,d)
     r[i]=' '+words.join(' ')}})
@@ -122,7 +123,7 @@ function t11_enumeration(text){
 const HEDGES=["I think","probably","seems like","not 100% sure but","from what I can tell","as far as I know","if I'm not mistaken","arguably"]
 function t12_uncertainty(sentences){
   const r=[...sentences]
-  r.forEach((_,i)=>{if(chance(0.15)&&r[i].trim().split(/\s+/).length>8){
+  r.forEach((_,i)=>{if(chance(0.15)&&countWords(r[i])>8){
     const s=r[i].trim();r[i]=' '+pick(HEDGES)+', '+s[0].toLowerCase()+s.slice(1)}})
   return r
 }
@@ -139,7 +140,7 @@ function t13_collocations(text){
 const TIME_ANCHORS=["earlier","recently","at the time","a while back","not long after","at that point","since then","around that time"]
 function t15_temporal(sentences){
   const r=[...sentences];let wc=0
-  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
+  for(let i=1;i<r.length;i++){wc+=countWords(r[i])
     if(wc>=150){
       if(chance(0.5)){
         const t=pick(TIME_ANCHORS);const s=r[i].trim()
@@ -215,9 +216,9 @@ function cleanup(text){
 
 // ── Chunker ──
 function chunkText(text,max=2500){
-  const total=text.split(/\s+/).length;if(total<=max)return[text]
+  const total=countWords(text);if(total<=max)return[text]
   const paras=text.split(/\n\n+/);const chunks=[];let cur=[],count=0
-  paras.forEach(p=>{const len=p.split(/\s+/).length
+  paras.forEach(p=>{const len=countWords(p)
     if(count+len>max&&cur.length){chunks.push(cur.join('\n\n'));cur=[p];count=len}
     else{cur.push(p);count+=len}})
   if(cur.length)chunks.push(cur.join('\n\n'));return chunks
@@ -232,7 +233,7 @@ export function runHumanizer(text,style='Professional',difficulty='Medium'){
     cleanedText = cleanedText.substring(cleanedText.indexOf('"'));
   }
 
-  const wc=cleanedText.trim().split(/\s+/).length
+  const wc=countWords(cleanedText)
   if(wc<20)return{result:cleanedText,warning:'Text is under 20 words — too short for effective humanization.'}
 
   const det=runDetection(cleanedText)
