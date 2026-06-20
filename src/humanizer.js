@@ -424,6 +424,42 @@ function t23_paragraphReorder(paragraphs) {
   return [paragraphs[0], ...middle, paragraphs[paragraphs.length - 1]]
 }
 
+// ── T24: Length Divergence (medium+) ──
+const LENGTH_EXPANSIONS = [
+  ' That part is worth sitting with for a second.',
+  ' Most people overlook this.',
+  ' It sounds simple but it rarely is in practice.',
+  ' This is where it gets interesting.',
+  ' That alone changes the picture quite a bit.',
+  ' And that matters more than it might seem.',
+  ' Worth flagging that one separately.'
+]
+
+function t24_lengthDivergence(sentences, inputWordCount, docState) {
+  const outputWordCount = sentences.join(' ').split(/\s+/).length
+  const similarity = outputWordCount / inputWordCount
+
+  // If output is within 10% of input length — force expansion or compression
+  if (similarity > 0.9 && similarity < 1.1) {
+    if (Math.random() < 0.5) {
+      // Expand: add elaboration to ~2 sentences
+      return sentences.map((s, i) => {
+        if (i % 4 === 1 && s.length > 40) {
+          return s.replace(/\.$/, pick(LENGTH_EXPANSIONS, docState))
+        }
+        return s
+      })
+    } else {
+      // Compress: drop the longest sentence (50% chance to keep)
+      const longest = sentences.reduce((max, s) =>
+        s.length > max.length ? s : max, '')
+      return sentences.filter(s => s !== longest || Math.random() > 0.5)
+    }
+  }
+
+  return sentences
+}
+
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
@@ -547,6 +583,9 @@ function processChunk(text,style,difficulty,docState){
 
     // Temporal grounding (not Academic)
     if(!isAcademic) sents=t15_temporal(sents, docState)
+
+    // Length divergence (force output word count away from input)
+    sents=t24_lengthDivergence(sents, countWords(text), docState)
 
     r=sents.join(' ')
 
