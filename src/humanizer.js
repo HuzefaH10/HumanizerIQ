@@ -1,640 +1,311 @@
-// ============================================================
-// HumanizerIQ — HUMANIZER ENGINE (v2)
-// Pure client-side text humanization. No API calls.
-// Systematically destroys AI writing patterns with:
-//   - Vocabulary replacement
-//   - Contraction injection
-//   - Sentence length variation
-//   - Human quirk injection (Hard)
-//   - Full edge case handling
-// ============================================================
+// HumanizerIQ — 20-Transform Humanizer Engine
+import{CONTRACTION_PAIRS,VOCAB_REPLACEMENTS,IDIOMS,UNNATURAL_COLLOCATIONS,FUNCTION_WORDS}from'./engine-data'
+import{runDetection}from'./detector'
 
-import { runDetection } from './detector'
+function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
+function chance(pct){return Math.random()<pct}
 
-// ============================================================
-// VOCABULARY REPLACEMENT MAP
-// Sorted longest-first at apply time so multi-word phrases
-// match before their sub-words.
-// ============================================================
+// ── Protected Zones (code, URLs, quotes, numbers) ──
+function extractProtected(text){
+  const zones=[];let c=text
+  const pats=[/```[\s\S]*?```/g,/`[^`]+`/g,/<code>[\s\S]*?<\/code>/gi,/https?:\/\/[^\s)>\]]+/g,/"[^"]{4,}"/g,/[$€£¥]?\d[\d,.]*\s*(%|percent|million|billion|thousand)?/gi]
+  pats.forEach(p=>{c=c.replace(p,m=>{const ph=`⟦P${zones.length}⟧`;zones.push(m);return ph})})
+  return{cleaned:c,zones}
+}
+function restoreProtected(text,zones){let r=text;zones.forEach((o,i)=>{r=r.replace(`⟦P${i}⟧`,o)});return r}
 
-const VOCAB_REPLACEMENTS = {
-  // Multi-word phrases (must replace before single words)
-  "delve into": "explore",
-  "embark on": "start",
-  "embark upon": "begin",
-  "testament to": "proof of",
-  "it is worth noting that": "",
-  "it's worth noting that": "",
-  "it is important to note that": "",
-  "it's important to note that": "",
-  "it is crucial to": "you need to",
-  "it's crucial to": "you need to",
-  "it is essential to": "you should",
-  "it's essential to": "you should",
-  "it should be noted that": "",
-  "it has been observed that": "",
-  "it is generally accepted that": "",
-  "needless to say": "",
-  "it goes without saying that": "",
-  "in order to": "to",
-  "due to the fact that": "because",
-  "in light of": "given",
-  "with respect to": "about",
-  "with regard to": "about",
-  "in terms of": "for",
-  "by means of": "using",
-  "a wide range of": "many",
-  "a variety of": "various",
-  "a plethora of": "many",
-  "a myriad of": "many",
-  "in the realm of": "in",
-  "in today's world": "today",
-  "in today's fast-paced": "in today's",
-  "shed light on": "explain",
-  "shed light": "clarify",
-  "stands as a": "is a",
-  "serves as a": "is a",
-  "at its core": "really",
-  "as previously mentioned": "",
-  "as mentioned above": "",
-  "in the context of": "for",
-  "with that being said": "still",
-  "that being said": "still",
-  "having said that": "but",
-  "on the other hand": "then again",
-  "state-of-the-art": "advanced",
-  "cutting-edge": "modern",
-  "game-changing": "significant",
-  "in conclusion": "",
-  "to summarize": "so",
-  "in summary": "in short",
-
-  // Single-word replacements
-  "delve": "look into",
-  "delves": "looks into",
-  "delving": "looking into",
-  "delved": "looked into",
-  "tapestry": "mix",
-  "nuanced": "subtle",
-  "multifaceted": "complex",
-  "meticulous": "careful",
-  "meticulously": "carefully",
-  "commendable": "impressive",
-  "pivotal": "key",
-  "intricate": "complex",
-  "intricacies": "details",
-  "underscore": "highlight",
-  "underscores": "shows",
-  "paramount": "critical",
-  "embark": "start",
-  "embarks": "starts",
-  "embarking": "starting",
-  "foster": "build",
-  "fosters": "builds",
-  "fostering": "building",
-  "leverage": "use",
-  "leverages": "uses",
-  "leveraging": "using",
-  "robust": "strong",
-  "robustness": "strength",
-  "paradigm": "approach",
-  "realm": "area",
-  "realms": "areas",
-  "beacon": "example",
-  "testament": "proof",
-  "noteworthy": "notable",
-  "groundbreaking": "new",
-  "synergy": "teamwork",
-  "holistic": "overall",
-  "scalable": "flexible",
-  "transformative": "significant",
-  "dynamic": "active",
-  "innovative": "new",
-  "streamline": "simplify",
-  "streamlines": "simplifies",
-  "comprehensive": "complete",
-  "facilitate": "help",
-  "facilitates": "helps",
-  "facilitating": "helping",
-  "facilitated": "helped",
-  "utilize": "use",
-  "utilizes": "uses",
-  "utilized": "used",
-  "utilizing": "using",
-  "utilization": "use",
-  "commence": "start",
-  "commences": "starts",
-  "commenced": "started",
-  "commencing": "starting",
-  "endeavor": "effort",
-  "endeavors": "efforts",
-  "endeavour": "effort",
-  "endeavoured": "tried",
-  "furthermore": "also",
-  "moreover": "and",
-  "additionally": "",
-  "harnessing": "using",
-  "showcasing": "showing",
-  "revolutionize": "change",
-  "revolutionizing": "changing",
-  "bustling": "busy",
-  "ascertain": "find out",
-  "elucidate": "explain",
-  "ameliorate": "improve",
-  "disseminate": "share",
-  "cognizant": "aware",
-  "necessitate": "need",
-  "necessitates": "needs",
-  "predominantly": "mostly",
-  "subsequent": "next",
-  "subsequently": "then",
-  "prior to": "before"
+// ── T1: Vocabulary Replacement (all) ──
+function t1_vocab(text){
+  let r=text;const sorted=Object.entries(VOCAB_REPLACEMENTS).sort((a,b)=>b[0].length-a[0].length)
+  sorted.forEach(([from,to])=>{const rx=new RegExp(`\\b${escRx(from)}\\b`,'gi')
+    r=r.replace(rx,m=>{if(to==='')return'';if(m[0]===m[0].toUpperCase()&&to.length>0)return to[0].toUpperCase()+to.slice(1);return to})})
+  return r.replace(/\s{2,}/g,' ').replace(/\.\s*\./g,'.').replace(/,\s*,/g,',')
 }
 
-
-// ============================================================
-// EDGE CASE: PROTECTED ZONE DETECTION
-// Skip code blocks, URLs, quoted text, numbers/stats
-// ============================================================
-
-/**
- * Extracts protected zones that should NOT be modified.
- * Returns { cleaned, zones } where cleaned has placeholders
- * and zones stores the originals for reinsertion.
- */
-function extractProtectedZones(text) {
-  const zones = []
-  let cleaned = text
-
-  // Pattern order matters — longest/most specific first
-  const patterns = [
-    // Code blocks (``` ... ```)
-    /```[\s\S]*?```/g,
-    // Inline code (` ... `)
-    /`[^`]+`/g,
-    // HTML code tags
-    /<code>[\s\S]*?<\/code>/gi,
-    // URLs
-    /https?:\/\/[^\s)>\]]+/g,
-    // Quoted text (double quotes, multi-word only)
-    /"[^"]{4,}"/g,
-    // Quoted text (single quotes, multi-word only)
-    /'[^']{4,}'/g,
-    // Numbers with units/percentages/currency
-    /[$€£¥]?\d[\d,.]*\s*(%|percent|million|billion|thousand|kg|lb|km|mi|mph|°[CF])?/gi,
-  ]
-
-  patterns.forEach(pattern => {
-    cleaned = cleaned.replace(pattern, (match) => {
-      const placeholder = `⟦PROTECTED_${zones.length}⟧`
-      zones.push(match)
-      return placeholder
-    })
-  })
-
-  return { cleaned, zones }
+// ── T2: Contraction Injection (easy+) ──
+function t2_contractions(text,style){
+  if(style==='Academic')return text;let r=text
+  CONTRACTION_PAIRS.forEach(({e,c})=>{const rx=new RegExp(`\\b${e}\\b`,'gi')
+    r=r.replace(rx,m=>{if(m[0]===m[0].toUpperCase())return c[0].toUpperCase()+c.slice(1);return c})})
+  return r
 }
 
-/**
- * Re-inserts protected zones back into processed text.
- */
-function restoreProtectedZones(text, zones) {
-  let result = text
-  zones.forEach((original, i) => {
-    result = result.replace(`⟦PROTECTED_${i}⟧`, original)
-  })
-  return result
+// ── T3: Transition Softening (all) ──
+const TRANSITION_MAP={"consequently, it is evident that":"So it pretty much comes down to","therefore, it can be concluded":"So basically","furthermore, it should be noted":"Also worth mentioning","it is imperative to":"You really need to","one must consider":"Think about","it is necessary to":"You need to","it can be observed that":"You can see that","it is evident that":"Clearly","it is apparent that":"Clearly","it stands to reason that":"It makes sense that","this suggests that":"This means","this indicates that":"This shows","this demonstrates that":"This shows","consequently":"So","furthermore":"Also","moreover":"And","additionally":"Also","nevertheless":"Still","nonetheless":"Even so","notwithstanding":"Despite that","in conclusion":"So","to summarize":"In short","in summary":"Basically","subsequently":"Then","accordingly":"So","hence":"So","thus":"So","therefore":"So","indeed":"Really","certainly":"Sure","undoubtedly":"No doubt","firstly":"First","secondly":"Second","thirdly":"Third","lastly":"Last","ultimately":"In the end"}
+function t3_transitions(text){
+  let r=text;const sorted=Object.entries(TRANSITION_MAP).sort((a,b)=>b[0].length-a[0].length)
+  sorted.forEach(([from,to])=>{const rx=new RegExp(`(^|(?<=[.!?]\\s))${escRx(from)}\\b[,]?\\s*`,'gim')
+    r=r.replace(rx,(m,pre)=>pre+to+' ')})
+  return r
 }
 
-
-// ============================================================
-// STEP 1: VOCABULARY REPLACEMENT
-// ============================================================
-
-function applyVocabReplacements(text) {
-  let result = text
-
-  // Sort by length descending so longer phrases replace first
-  const sorted = Object.entries(VOCAB_REPLACEMENTS)
-    .sort((a, b) => b[0].length - a[0].length)
-
-  sorted.forEach(([find, replace]) => {
-    const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const regex = new RegExp(`\\b${escaped}\\b`, 'gi')
-
-    result = result.replace(regex, (match) => {
-      if (replace === '') return ''
-      // Preserve capitalization of first character
-      if (match[0] === match[0].toUpperCase() && replace.length > 0) {
-        return replace.charAt(0).toUpperCase() + replace.slice(1)
-      }
-      return replace
-    })
-  })
-
-  // Clean up artifacts from deletions
-  result = result.replace(/\s{2,}/g, ' ')
-  result = result.replace(/\.\s*\./g, '.')
-  result = result.replace(/,\s*\./g, '.')
-  result = result.replace(/,\s*,/g, ',')
-  result = result.replace(/^\s+/gm, '')
-
-  return result
+// ── T4: Sentence Length Variation (medium+) ──
+function t4_sentencevar(sentences){
+  const r=[...sentences]
+  for(let i=0;i<r.length-1;i++){
+    const cw=r[i].trim().split(/\s+/).length,nw=r[i+1]?r[i+1].trim().split(/\s+/).length:0
+    if(Math.abs(cw-nw)<5&&cw>15){
+      const pts=[/,\s*(but|and|so|yet|while|although|because|since)\s/i,/;\s*/,/,\s*which\s/i]
+      for(const p of pts){const m=r[i].match(p)
+        if(m){const idx=r[i].indexOf(m[0]);if(idx>8&&idx<r[i].length-8){
+          const p1=r[i].substring(0,idx).trim()+'.';let p2=r[i].substring(idx+m[0].length).trim()
+          const conj=m[1]?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
+          p2=conj+(p2[0]||'').toUpperCase()+p2.slice(1)
+          r.splice(i,1,p1,p2);break}}}}
+    if(cw<7&&nw<7&&nw>0&&chance(0.4)){
+      const merged=r[i].replace(/[.!?]+$/,'')+' — '+r[i+1].trim()[0].toLowerCase()+r[i+1].trim().slice(1)
+      r.splice(i,2,merged)}}
+  return r
 }
 
-
-// ============================================================
-// STEP 2: CONTRACTION INJECTOR
-// ============================================================
-
-function injectContractions(text, style) {
-  // Academics don't always contract — skip for academic style
-  if (style === 'Academic') return text
-
-  let result = text
-
-  const pairs = [
-    [/\bdo not\b/gi, "don't"],
-    [/\bdoes not\b/gi, "doesn't"],
-    [/\bdid not\b/gi, "didn't"],
-    [/\bwill not\b/gi, "won't"],
-    [/\bwould not\b/gi, "wouldn't"],
-    [/\bcould not\b/gi, "couldn't"],
-    [/\bshould not\b/gi, "shouldn't"],
-    [/\bis not\b/gi, "isn't"],
-    [/\bare not\b/gi, "aren't"],
-    [/\bwas not\b/gi, "wasn't"],
-    [/\bwere not\b/gi, "weren't"],
-    [/\bhave not\b/gi, "haven't"],
-    [/\bhas not\b/gi, "hasn't"],
-    [/\bhad not\b/gi, "hadn't"],
-    [/\bit is\b/gi, "it's"],
-    [/\bthat is\b/gi, "that's"],
-    [/\bthere is\b/gi, "there's"],
-    [/\bthey are\b/gi, "they're"],
-    [/\bwe are\b/gi, "we're"],
-    [/\byou are\b/gi, "you're"],
-    [/\bi am\b/gi, "I'm"],
-    [/\bi will\b/gi, "I'll"],
-    [/\bi would\b/gi, "I'd"],
-    [/\bi have\b/gi, "I've"],
-    [/\blet us\b/gi, "let's"],
-    [/\bwho is\b/gi, "who's"],
-    [/\bwhat is\b/gi, "what's"],
-    [/\bwhere is\b/gi, "where's"],
-    [/\bhow is\b/gi, "how's"],
-  ]
-
-  pairs.forEach(([pattern, replacement]) => {
-    result = result.replace(pattern, (match) => {
-      // Preserve leading capitalization
-      if (match[0] === match[0].toUpperCase()) {
-        return replacement.charAt(0).toUpperCase() + replacement.slice(1)
-      }
-      return replacement
-    })
-  })
-
-  return result
+// ── T5: Run-on & Fragment Injection (medium+) ──
+function t5_fragments(sentences){
+  const frags=["Simple as that.","Not ideal.","Worth considering.","Big difference.","Exactly.","Fair enough.","No question.","Not even close.","A real shift.","That matters.","Key point.","Think about it."]
+  const r=[...sentences]
+  const targetCount=Math.max(1,Math.floor(r.length*0.12))
+  for(let n=0;n<targetCount&&r.length>3;n++){
+    const idx=Math.floor(Math.random()*(r.length-2))+1
+    r.splice(idx,0,' '+pick(frags))}
+  return r
 }
 
-
-// ============================================================
-// STEP 3: SENTENCE LENGTH VARIATOR (Medium + Hard)
-// ============================================================
-
-function varySentenceLengths(sentences, difficulty) {
-  if (difficulty === 'Easy') return sentences
-
-  const result = [...sentences]
-
-  for (let i = 0; i < result.length - 1; i++) {
-    const curr = result[i].trim().split(/\s+/).length
-    const next = result[i + 1] ? result[i + 1].trim().split(/\s+/).length : 0
-
-    // If two consecutive sentences are similar length and long, split one
-    if (Math.abs(curr - next) < 5 && curr > 15) {
-      const splitPatterns = [
-        /,\s*(but|and|so|yet|while|although|because|since)\s/i,
-        /;\s*/,
-        /,\s*which\s/i,
-        /,\s*where\s/i
-      ]
-
-      for (const pattern of splitPatterns) {
-        const match = result[i].match(pattern)
-        if (match) {
-          const idx = result[i].indexOf(match[0])
-          if (idx > 8 && idx < result[i].length - 8) {
-            const part1 = result[i].substring(0, idx).trim() + '.'
-            const conjunction = match[1]
-              ? match[1].charAt(0).toUpperCase() + match[1].slice(1)
-              : ''
-            let part2 = result[i].substring(idx + match[0].length).trim()
-            part2 = conjunction
-              ? conjunction + ' ' + part2
-              : part2.charAt(0).toUpperCase() + part2.slice(1)
-            result.splice(i, 1, part1, part2)
-            break
-          }
-        }
-      }
-    }
-
-    // Merge very short consecutive sentences (<7 words each)
-    if (curr < 7 && next < 7 && next > 0 && i + 1 < result.length && Math.random() > 0.5) {
-      const merged = result[i].replace(/[.!?]+$/, '') +
-        ' — ' +
-        result[i + 1].trim().charAt(0).toLowerCase() +
-        result[i + 1].trim().slice(1)
-      result.splice(i, 2, merged)
-    }
-  }
-
-  return result
+// ── T6: Dysfluency Injection (medium+) ──
+const DYSFLUENCIES=["actually","I mean","well","to be fair","sort of","pretty much","kind of","or something like that","in a way","more or less"]
+function t6_dysfluency(sentences){
+  const r=[...sentences];const rate=0.02
+  r.forEach((_,i)=>{if(chance(rate)&&r[i].trim().split(/\s+/).length>6){
+    const d=pick(DYSFLUENCIES);const words=r[i].trim().split(/\s+/)
+    const pos=Math.floor(words.length*0.3)+1;words.splice(pos,0,d)
+    r[i]=' '+words.join(' ')}})
+  return r
 }
 
-
-// ============================================================
-// STEP 4: HUMAN QUIRK INJECTOR (Hard only)
-// ============================================================
-
-const QUIRKS = {
-  fragments: [
-    "Simple as that.",
-    "Not ideal.",
-    "Worth considering.",
-    "Big difference.",
-    "Exactly.",
-    "Fair enough.",
-    "No question.",
-    "Not even close.",
-    "A real shift.",
-    "That matters."
-  ],
-  rhetoricalQuestions: [
-    "Why does this matter?",
-    "So what's the takeaway?",
-    "Makes sense, right?",
-    "Sound familiar?",
-    "But does it actually work that way?",
-    "What does this mean in practice?"
-  ],
-  informalBridges: [
-    "Here's the thing —",
-    "The short answer:",
-    "Put simply:",
-    "To be clear:",
-    "Bottom line:",
-    "The reality is,"
-  ]
+// ── T7: Pragmatic Marker Insertion (medium+) ──
+const PRAG_INSERTS=["Anyway,","Honestly,","By the way,","You know,","That said,","Come to think of it,","Look,","Mind you,","Granted,","Admittedly,","The thing is,","Here's the deal —"]
+function t7_pragmatic(sentences,style){
+  if(style==='Academic')return sentences
+  const r=[...sentences];const rate=0.08
+  for(let i=1;i<r.length;i++){if(chance(rate)){
+    const s=r[i].trim();r[i]=' '+pick(PRAG_INSERTS)+' '+s[0].toLowerCase()+s.slice(1)}}
+  return r
 }
 
-function injectHumanQuirks(sentences, style) {
-  const result = [...sentences]
-
-  // 1. Inject a fragment every ~200 words
-  let wordCount = 0
-  const fragmentInserts = []
-  result.forEach((sentence, i) => {
-    wordCount += sentence.split(/\s+/).length
-    if (wordCount >= 200 && i < result.length - 1) {
-      wordCount = 0
-      fragmentInserts.push(i + 1)
-    }
-  })
-
-  // Insert fragments (reverse order so indices don't shift)
-  fragmentInserts.reverse().forEach(idx => {
-    const fragment = QUIRKS.fragments[Math.floor(Math.random() * QUIRKS.fragments.length)]
-    result.splice(idx, 0, ' ' + fragment)
-  })
-
-  // 2. Add a rhetorical question near the midpoint
-  if (result.length > 4) {
-    const midPoint = Math.floor(result.length * (0.4 + Math.random() * 0.2))
-    const question = QUIRKS.rhetoricalQuestions[Math.floor(Math.random() * QUIRKS.rhetoricalQuestions.length)]
-    result.splice(midPoint, 0, ' ' + question)
-  }
-
-  // 3. Replace one bland opener with an informal bridge (not for academic)
-  if (style !== 'Academic' && result.length > 3) {
-    const targetIdx = Math.floor(result.length * (0.3 + Math.random() * 0.4))
-    if (result[targetIdx]) {
-      const bridge = QUIRKS.informalBridges[Math.floor(Math.random() * QUIRKS.informalBridges.length)]
-      const sentence = result[targetIdx].trim()
-      result[targetIdx] = ' ' + bridge + ' ' +
-        sentence.charAt(0).toLowerCase() + sentence.slice(1)
-    }
-  }
-
-  // 4. Casual mode extra: downgrade formal words
-  if (style === 'Casual') {
-    for (let i = 0; i < result.length; i++) {
-      result[i] = result[i]
-        .replace(/\bsignificant\b/gi, 'big')
-        .replace(/\bnumerous\b/gi, 'a bunch of')
-        .replace(/\bapproximately\b/gi, 'about')
-        .replace(/\bdemonstrate\b/gi, 'show')
-        .replace(/\bdemonstrates\b/gi, 'shows')
-        .replace(/\bpurchase\b/gi, 'buy')
-        .replace(/\bpossess\b/gi, 'have')
-        .replace(/\bobtain\b/gi, 'get')
-        .replace(/\brequire\b/gi, 'need')
-        .replace(/\bconstitute\b/gi, 'make up')
-        .replace(/\bvery important\b/gi, 'really important')
-    }
-  }
-
-  return result
+// ── T8: Cognitive Transition Replacement (medium+) ──
+const COG_TRANSITIONS=["That got me thinking...","What's interesting here is","The odd part is","At first this seems","Here's where it gets interesting —","Which brings up another point —","Now here's the thing —","This is where it gets tricky —"]
+function t8_cognitive(sentences){
+  const r=[...sentences];let inserted=0
+  for(let i=2;i<r.length-1;i+=Math.floor(r.length/3)){
+    if(inserted<2){const s=r[i].trim()
+      r[i]=' '+pick(COG_TRANSITIONS)+' '+s[0].toLowerCase()+s.slice(1);inserted++}}
+  return r
 }
 
-
-// ============================================================
-// PARAGRAPH SYMMETRY BREAKER (Medium + Hard)
-// ============================================================
-
-function breakParagraphSymmetry(paragraphs) {
-  if (paragraphs.length <= 2) return paragraphs
-
-  const result = []
-
-  for (let i = 0; i < paragraphs.length; i++) {
-    const p = paragraphs[i].trim()
-    if (!p) continue
-
-    const sentences = p.match(/[^.!?]+[.!?]+/g) || [p]
-
-    // Split large paragraphs (6+ sentences)
-    if (sentences.length > 5 && Math.random() > 0.5) {
-      const splitPoint = Math.floor(sentences.length * (0.3 + Math.random() * 0.4))
-      result.push(sentences.slice(0, splitPoint).join(' '))
-      result.push(sentences.slice(splitPoint).join(' '))
-    }
-    // Merge tiny paragraphs (≤2 sentences) with next
-    else if (sentences.length <= 2 && i + 1 < paragraphs.length &&
-             paragraphs[i + 1].trim().length > 0 && Math.random() > 0.5) {
-      result.push(p + ' ' + paragraphs[i + 1].trim())
-      i++ // skip next
-    } else {
-      result.push(p)
-    }
-  }
-
-  return result
+// ── T9: Memory Anchor Injection (hard) ──
+const MEM_ANCHORS=["in one project I worked on,","I remember running into this —","a weird thing I noticed was","the first time I tried this,","if I remember correctly,","roughly speaking,","something along those lines —","from what I've seen,","in my experience,","now that I think about it,"]
+function t9_memanchors(sentences){
+  const r=[...sentences];let wc=0
+  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
+    if(wc>=300){const s=r[i].trim();r[i]=' '+pick(MEM_ANCHORS)+' '+s[0].toLowerCase()+s.slice(1);wc=0}}
+  return r
 }
 
-
-// ============================================================
-// TEXT CHUNKER — handle >2500 words
-// ============================================================
-
-function chunkText(text, maxWords = 2500) {
-  const totalWords = text.split(/\s+/).length
-  if (totalWords <= maxWords) return [text]
-
-  const chunks = []
-  const paragraphs = text.split(/\n\n+/)
-  let currentChunk = []
-  let currentCount = 0
-
-  paragraphs.forEach(para => {
-    const paraWords = para.split(/\s+/).length
-    if (currentCount + paraWords > maxWords && currentChunk.length > 0) {
-      chunks.push(currentChunk.join('\n\n'))
-      currentChunk = [para]
-      currentCount = paraWords
-    } else {
-      currentChunk.push(para)
-      currentCount += paraWords
-    }
-  })
-
-  if (currentChunk.length > 0) chunks.push(currentChunk.join('\n\n'))
-  return chunks
+// ── T10: Micro-Digression (hard) ──
+const DIGRESSIONS=["One unexpected side effect of this was how it changed the whole approach.","I once ran into a case where this backfired completely.","An odd exception to this rule popped up in practice.","Side note — this almost never works the way textbooks describe it.","There's a funny story here but I'll save it for another time."]
+function t10_digression(sentences){
+  if(sentences.length<10)return sentences
+  const r=[...sentences];const pos=Math.floor(r.length*0.6)
+  r.splice(pos,0,' '+pick(DIGRESSIONS)+' Anyway, back to the main point —')
+  return r
 }
 
-
-// ============================================================
-// FINAL CLEANUP
-// ============================================================
-
-function cleanupText(text) {
-  return text
-    // Fix double/triple spaces
-    .replace(/\s{2,}/g, ' ')
-    // Fix space before punctuation
-    .replace(/\s+([.!?,;:])/g, '$1')
-    // Fix missing space after punctuation
-    .replace(/([.!?])([A-Z])/g, '$1 $2')
-    // Fix double periods
-    .replace(/\.{2,}/g, '.')
-    // Fix orphaned commas
-    .replace(/, ,/g, ',')
-    // Capitalize after sentence enders
-    .replace(/([.!?])\s+([a-z])/g, (_, punct, letter) => {
-      return punct + ' ' + letter.toUpperCase()
-    })
-    // Capitalize paragraph starts
-    .replace(/(^|\n\n)(\s*)([a-z])/g, (_, prefix, space, letter) => {
-      return prefix + space + letter.toUpperCase()
-    })
-    // Fix triple+ newlines
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+// ── T11: Incomplete Enumeration (hard) ──
+function t11_enumeration(text){
+  return text.replace(/(\b\w+(?:,\s*\w+){3,})\b/g,(match)=>{
+    if(!chance(0.3))return match
+    const items=match.split(/,\s*/);if(items.length<4)return match
+    return items.slice(0,3).join(', ')+', and a few others'})
 }
 
-
-// ============================================================
-// MASTER HUMANIZER FUNCTION
-// ============================================================
-
-/**
- * @param {string} text — Input text to humanize
- * @param {string} style — 'Academic' | 'Professional' | 'Casual'
- * @param {string} difficulty — 'Easy' | 'Medium' | 'Hard'
- * @returns {{ result: string, note?: string, warning?: string }}
- */
-export function runHumanizer(text, style = 'Professional', difficulty = 'Medium') {
-  // ── EDGE CASE 1: Empty input ──
-  if (!text || text.trim().length === 0) {
-    return { result: '', warning: 'No text provided.' }
-  }
-
-  const totalWords = text.trim().split(/\s+/).length
-
-  // ── EDGE CASE 2: Too short ──
-  if (totalWords < 20) {
-    return {
-      result: text,
-      warning: 'Text is under 20 words — too short for effective humanization.'
-    }
-  }
-
-  // ── EDGE CASE 3: Already human — run quick detection ──
-  const quickDetect = runDetection(text)
-  if (quickDetect.score < 15) {
-    return {
-      result: text,
-      note: 'This text already reads as human-written (AI score: ' + quickDetect.score + '%). No changes needed.'
-    }
-  }
-
-  // ── EDGE CASE 10: Chunk if over 2500 words ──
-  const chunks = chunkText(text, 2500)
-  const processedChunks = chunks.map(chunk => processChunk(chunk, style, difficulty))
-
-  return {
-    result: processedChunks.join('\n\n'),
-    note: quickDetect.score > 70
-      ? 'Original AI score: ' + quickDetect.score + '%. Heavy rewriting applied.'
-      : undefined
-  }
+// ── T12: Uneven Certainty (hard) ──
+const HEDGES=["I think","probably","seems like","not 100% sure but","from what I can tell","as far as I know","if I'm not mistaken","arguably"]
+function t12_uncertainty(sentences){
+  const r=[...sentences]
+  r.forEach((_,i)=>{if(chance(0.15)&&r[i].trim().split(/\s+/).length>8){
+    const s=r[i].trim();r[i]=' '+pick(HEDGES)+', '+s[0].toLowerCase()+s.slice(1)}})
+  return r
 }
 
-/**
- * Process a single chunk of text (≤2500 words)
- */
-function processChunk(text, style, difficulty) {
-  // ── Extract protected zones (code, URLs, quotes, numbers) ──
-  const { cleaned, zones } = extractProtectedZones(text)
+// ── T13: Collocation Normalization (all) ──
+function t13_collocations(text){
+  let r=text;Object.entries(UNNATURAL_COLLOCATIONS).sort((a,b)=>b[0].length-a[0].length).forEach(([from,to])=>{
+    const rx=new RegExp(`\\b${escRx(from)}\\b`,'gi')
+    r=r.replace(rx,m=>{if(m[0]===m[0].toUpperCase())return to[0].toUpperCase()+to.slice(1);return to})})
+  return r
+}
 
-  let processed = cleaned
+// ── T14: Idiom Injection (medium+) ──
+function t14_idioms(sentences){
+  const r=[...sentences];let wc=0
+  const contextIdioms=["at the end of the day","to put it bluntly","in a nutshell","when push comes to shove","for what it's worth","the bottom line is","all things considered","no two ways about it"]
+  for(let i=1;i<r.length;i++){wc+=r[i].split(/\s+/).length
+    if(wc>=400){const s=r[i].trim();r[i]=' '+pick(contextIdioms)+', '+s[0].toLowerCase()+s.slice(1);wc=0}}
+  return r
+}
 
-  // ── STEP 1: Vocabulary replacement (all difficulties) ──
-  processed = applyVocabReplacements(processed)
+// ── T15: Temporal Grounding (medium+) ──
+const TIME_ANCHORS=["earlier","recently","at the time","a while back","not long after","at that point","back then","since then","around that time"]
+function t15_temporal(sentences){
+  const r=[...sentences]
+  r.forEach((_,i)=>{if(chance(0.05)&&r[i].trim().split(/\s+/).length>6){
+    const words=r[i].trim().split(/\s+/);words.splice(1,0,pick(TIME_ANCHORS))
+    r[i]=' '+words.join(' ')}})
+  return r
+}
 
-  // ── STEP 2: Contractions (all except Academic at Easy) ──
-  if (!(style === 'Academic' && difficulty === 'Easy')) {
-    processed = injectContractions(processed, style)
+// ── T16: Redundancy Weaving (hard) ──
+const EMPHASIS_PAIRS=[["big","massive"],["clear","obvious"],["fast","quick"],["slow","gradual"],["hard","difficult"],["easy","straightforward"],["new","fresh"],["old","dated"],["simple","basic"],["complex","layered"]]
+function t16_redundancy(sentences){
+  const r=[...sentences]
+  r.forEach((_,i)=>{if(chance(0.03)){const pair=pick(EMPHASIS_PAIRS)
+    const rx=new RegExp(`\\b${pair[0]}\\b`,'i')
+    if(rx.test(r[i]))r[i]=r[i].replace(rx,`${pair[0]}, ${pair[1]}`)}})
+  return r
+}
+
+// ── T17: Rhyme/Assonance Disruption (medium+) ──
+const SUFFIX_SWAPS={"-tion":"process","-ing":"work","-ness":"quality","-ment":"effort","-ity":"character","-ence":"aspect","-ance":"factor","-ly":"well","-ful":"rich","-ous":"notable"}
+function t17_rhymedisrupt(sentences){
+  const r=[...sentences]
+  for(let i=2;i<r.length;i++){
+    const endings=[r[i-2],r[i-1],r[i]].map(s=>{const w=s.trim().split(/\s+/);return(w[w.length-1]||'').replace(/[.!?,;:]+$/,'')})
+    const suffixes=endings.map(w=>{for(const s of Object.keys(SUFFIX_SWAPS))if(w.endsWith(s.slice(1)))return s;return null})
+    if(suffixes[0]&&suffixes[0]===suffixes[1]&&suffixes[1]===suffixes[2]){
+      const words=r[i].trim().split(/\s+/);const last=words[words.length-1].replace(/[.!?,;:]+$/,'')
+      const punct=(words[words.length-1].match(/[.!?,;:]+$/)||[''])[0]
+      for(const[suf,rep]of Object.entries(SUFFIX_SWAPS)){if(last.endsWith(suf.slice(1))){words[words.length-1]=rep+punct;break}}
+      r[i]=' '+words.join(' ')}}
+  return r
+}
+
+// ── T18: Asymmetric Detail Distribution (hard) ──
+const ELABORATIONS=["This is particularly true when you look at the broader picture.","The implications here are worth spending a moment on.","It's one of those things that doesn't get enough attention.","This point deserves a bit more unpacking."]
+function t18_asymmetric(paragraphs){
+  if(paragraphs.length<4)return paragraphs
+  const r=[...paragraphs]
+  // Expand ~20%
+  const expandCount=Math.max(1,Math.floor(r.length*0.2))
+  for(let n=0;n<expandCount;n++){const i=Math.floor(Math.random()*r.length)
+    r[i]=r[i]+' '+pick(ELABORATIONS)}
+  // Compress ~20% (remove last sentence)
+  const compressCount=Math.max(1,Math.floor(r.length*0.2))
+  for(let n=0;n<compressCount;n++){const i=Math.floor(Math.random()*r.length)
+    const sents=r[i].match(/[^.!?]+[.!?]+/g);if(sents&&sents.length>2)r[i]=sents.slice(0,-1).join(' ')}
+  return r
+}
+
+// ── T19: Oxford Comma Inconsistency (hard) ──
+function t19_oxfordcomma(text){
+  return text.replace(/,\s*and\s+(\w+)([.!?])/gi,(m,last,punct)=>{
+    if(chance(0.25))return' and '+last+punct;return m})
+}
+
+// ── T20: Em Dash Spacing Variation (hard) ──
+function t20_emdash(text){
+  return text.replace(/\s*—\s*/g,()=>chance(0.5)?' — ':'—')
+}
+
+// ── Cleanup ──
+function cleanup(text){
+  return text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
+    .replace(/([.!?])([A-Z])/g,'$1 $2').replace(/\.{2,}/g,'.').replace(/,\s*,/g,',')
+    .replace(/([.!?])\s+([a-z])/g,(_,p,l)=>p+' '+l.toUpperCase())
+    .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
+    .replace(/\n{3,}/g,'\n\n').trim()
+}
+
+// ── Chunker ──
+function chunkText(text,max=2500){
+  const total=text.split(/\s+/).length;if(total<=max)return[text]
+  const paras=text.split(/\n\n+/);const chunks=[];let cur=[],count=0
+  paras.forEach(p=>{const len=p.split(/\s+/).length
+    if(count+len>max&&cur.length){chunks.push(cur.join('\n\n'));cur=[p];count=len}
+    else{cur.push(p);count+=len}})
+  if(cur.length)chunks.push(cur.join('\n\n'));return chunks
+}
+
+// ── MASTER HUMANIZER ──
+export function runHumanizer(text,style='Professional',difficulty='Medium'){
+  if(!text||text.trim().length===0)return{result:'',warning:'No text provided.'}
+  const wc=text.trim().split(/\s+/).length
+  if(wc<20)return{result:text,warning:'Text is under 20 words — too short for effective humanization.'}
+
+  const det=runDetection(text)
+  if(det.score<15)return{result:text,note:`This text already reads as human-written (AI score: ${det.score}%). No changes needed.`}
+
+  const chunks=chunkText(text)
+  const processed=chunks.map(chunk=>processChunk(chunk,style,difficulty))
+  return{result:processed.join('\n\n'),note:det.score>70?`Original AI score: ${det.score}%. Heavy rewriting applied.`:undefined}
+}
+
+function processChunk(text,style,difficulty){
+  const isEasy=difficulty==='Easy',isMedium=difficulty==='Medium',isHard=difficulty==='Hard'
+  const{cleaned,zones}=extractProtected(text)
+  let r=cleaned
+
+  // T1: Vocab replacement (all)
+  r=t1_vocab(r)
+  // T13: Collocation normalization (all)
+  r=t13_collocations(r)
+  // T3: Transition softening (all)
+  r=t3_transitions(r)
+  // T2: Contractions (all except Academic+Easy)
+  if(!(style==='Academic'&&isEasy))r=t2_contractions(r,style)
+
+  // Medium + Hard transforms
+  if(isMedium||isHard){
+    let sents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    sents=t4_sentencevar(sents)         // T4
+    sents=t5_fragments(sents)           // T5
+    sents=t6_dysfluency(sents)          // T6
+    sents=t7_pragmatic(sents,style)     // T7
+    sents=t8_cognitive(sents)           // T8
+    sents=t14_idioms(sents)             // T14
+    sents=t15_temporal(sents)           // T15
+    sents=t17_rhymedisrupt(sents)       // T17
+    r=sents.join(' ')
+    // Paragraph rebalancing
+    const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
+    if(paras.length>2){const rebal=[];for(let i=0;i<paras.length;i++){const p=paras[i].trim();if(!p)continue
+      const ps=p.match(/[^.!?]+[.!?]+/g)||[p]
+      if(ps.length>5&&chance(0.5)){const sp=Math.floor(ps.length*(0.3+Math.random()*0.4));rebal.push(ps.slice(0,sp).join(' '));rebal.push(ps.slice(sp).join(' '))}
+      else if(ps.length<=2&&i+1<paras.length&&chance(0.5)){rebal.push(p+' '+paras[i+1].trim());i++}
+      else rebal.push(p)}
+      r=rebal.join('\n\n')}
   }
 
-  // ── STEP 3: Sentence length variation (Medium + Hard) ──
-  if (difficulty === 'Medium' || difficulty === 'Hard') {
-    let sentences = processed.match(/[^.!?]+[.!?]+/g) || [processed]
-    sentences = varySentenceLengths(sentences, difficulty)
-    processed = sentences.join(' ')
-
-    // Break paragraph symmetry
-    const paragraphs = processed.split(/\n\n+/).filter(p => p.trim().length > 0)
-    if (paragraphs.length > 2) {
-      const rebalanced = breakParagraphSymmetry(paragraphs)
-      processed = rebalanced.join('\n\n')
-    }
+  // Hard-only transforms
+  if(isHard){
+    let sents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    sents=t9_memanchors(sents)          // T9
+    sents=t12_uncertainty(sents)        // T12
+    sents=t16_redundancy(sents)         // T16
+    r=sents.join(' ')
+    // T10: Micro-digression
+    const dsents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    r=t10_digression(dsents).join(' ')
+    // T11: Incomplete enumeration
+    r=t11_enumeration(r)
+    // T18: Asymmetric detail
+    const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
+    r=t18_asymmetric(paras).join('\n\n')
+    // T19: Oxford comma inconsistency
+    r=t19_oxfordcomma(r)
+    // T20: Em dash spacing
+    r=t20_emdash(r)
   }
 
-  // ── STEP 4: Human quirks (Hard only) ──
-  if (difficulty === 'Hard') {
-    let sentences = processed.match(/[^.!?]+[.!?]+/g) || [processed]
-    sentences = injectHumanQuirks(sentences, style)
-    processed = sentences.join(' ')
-  }
-
-  // ── STEP 5: Final cleanup ──
-  processed = cleanupText(processed)
-
-  // ── Re-insert protected zones ──
-  processed = restoreProtectedZones(processed, zones)
-
-  return processed
+  r=cleanup(r)
+  r=restoreProtected(r,zones)
+  return r
 }

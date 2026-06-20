@@ -1,675 +1,310 @@
-// ============================================================
-// HumanizerIQ — DETECTOR ENGINE
-// Pure client-side AI text detection. No API calls.
-// 10 independent modules that scan for AI writing patterns.
-// ============================================================
+// HumanizerIQ — 25-Module Detection Engine
+import{AI_VOCAB,AI_PHRASES,TRANSITIONS,CONTRACTION_PAIRS,PASSIVE_RE,HEDGING,FORMAL_MARKERS,INFORMAL_MARKERS,FUNCTION_WORDS,POS_WORDS,NEG_WORDS,REVISION_MARKERS,PRAGMATIC_MARKERS,TEMPORAL_MARKERS,IDIOMS,UNNATURAL_COLLOCATIONS,SYNONYM_CLUSTERS,HIGHLIGHT_COLORS}from'./engine-data'
 
-// ── AI VOCABULARY FINGERPRINT DATABASE ──────────────────────
+// ── Preprocessing (shared, computed once) ──
+function preprocess(text){
+  const sentences=(text.match(/[^.!?]+[.!?]+/g)||[]).map(s=>s.trim()).filter(s=>s.length>0)
+  const words=text.toLowerCase().match(/\b[a-z']+\b/g)||[]
+  const paragraphs=text.split(/\n\n+/).filter(p=>p.trim().length>0)
+  const lc=text.toLowerCase()
+  const sentWords=sentences.map(s=>(s.match(/\b[a-z']+\b/gi)||[]))
+  const sentLens=sentWords.map(w=>w.length)
+  return{text,sentences,words,paragraphs,lc,sentWords,sentLens,wc:words.length,sc:sentences.length}
+}
+function clamp(v,lo=0,hi=1){return Math.max(lo,Math.min(hi,v))}
+function escRx(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 
-const AI_VOCAB = {
-  critical: [
-    "delve", "delves", "delving", "delved",
-    "tapestry", "nuanced", "multifaceted",
-    "bustling", "harnessing", "showcasing",
-    "revolutionize", "revolutionizing",
-    "meticulous", "meticulously",
-    "commendable", "pivotal", "intricate",
-    "intricacies", "underscore", "underscores",
-    "paramount", "embark", "embarks", "embarking",
-    "foster", "fosters", "fostering",
-    "leverage", "leverages", "leveraging",
-    "robust", "robustness", "paradigm",
-    "realm", "realms", "beacon",
-    "testament", "noteworthy", "groundbreaking",
-    "cutting-edge", "state-of-the-art",
-    "game-changing", "synergy", "holistic",
-    "scalable", "transformative", "dynamic",
-    "innovative", "streamline", "streamlines"
-  ],
-  phrases: [
-    "shed light on", "shed light",
-    "in the realm of", "in today's",
-    "in today's world", "in today's fast-paced",
-    "it is worth noting", "it's worth noting",
-    "it is important to note", "it's important to note",
-    "it is crucial to", "it's crucial to",
-    "it is essential to", "it's essential to",
-    "needless to say", "goes without saying",
-    "stands as a", "serves as a",
-    "at its core", "in conclusion",
-    "to summarize", "in summary",
-    "as previously mentioned", "as mentioned above",
-    "in the context of", "with that being said",
-    "that being said", "having said that",
-    "on the other hand", "it goes without saying",
-    "a testament to", "a wide range of",
-    "a variety of", "in order to",
-    "due to the fact that", "in light of",
-    "with respect to", "with regard to",
-    "in terms of", "by means of"
-  ]
+// ── MODULE 1: AI Vocabulary Fingerprint ──
+function m1_vocab(p){
+  const flagged=[];let raw=0
+  AI_VOCAB.forEach(w=>{const rx=new RegExp(`\\b${escRx(w)}\\b`,'gi');[...p.text.matchAll(rx)].forEach(m=>{raw+=2;flagged.push({text:m[0],idx:m.index,type:'vocab',reason:`AI word: "${w}"`})})})
+  AI_PHRASES.forEach(ph=>{let i=p.lc.indexOf(ph);while(i!==-1){raw+=3;flagged.push({text:p.text.substring(i,i+ph.length),idx:i,type:'vocab',reason:`AI phrase: "${ph}"`});i=p.lc.indexOf(ph,i+1)}})
+  return{score:clamp(p.wc>0?raw/(p.wc*0.15):0),flagged,detail:`${flagged.length} AI vocab hits`}
 }
 
-// ── TRANSITION WORD DATABASE ────────────────────────────────
-
-const TRANSITIONS = {
-  additive: ["furthermore", "moreover", "additionally", "in addition",
-             "also", "besides", "likewise", "similarly", "equally"],
-  contrast: ["however", "nevertheless", "nonetheless", "on the contrary",
-             "conversely", "notwithstanding", "despite this", "even so"],
-  causal: ["therefore", "consequently", "as a result", "thus", "hence",
-           "accordingly", "for this reason", "this leads to"],
-  sequence: ["firstly", "secondly", "thirdly", "finally", "subsequently",
-             "previously", "initially", "ultimately", "lastly"],
-  emphasis: ["indeed", "certainly", "undoubtedly", "unquestionably",
-             "without doubt", "of course", "naturally", "obviously"]
+// ── MODULE 2: Transition Overuse ──
+function m2_transitions(p){
+  let count=0;const flagged=[]
+  p.sentences.forEach(s=>{const l=s.toLowerCase().trim();for(const cat in TRANSITIONS){TRANSITIONS[cat].forEach(t=>{if(l.startsWith(t)||l.includes(`, ${t}`)){count++;flagged.push({text:s,type:'transition',reason:`Transition: "${t}"`})}})}})
+  const ratio=p.sc>0?count/p.sc:0
+  return{score:clamp(ratio>0.15?ratio*0.8:ratio*0.4),flagged,detail:`${count}/${p.sc} sentences start with transitions`}
 }
 
-// ── CONTRACTION PAIRS ───────────────────────────────────────
-
-const CONTRACTION_PAIRS = [
-  { expanded: "do not", contracted: "don't" },
-  { expanded: "does not", contracted: "doesn't" },
-  { expanded: "did not", contracted: "didn't" },
-  { expanded: "will not", contracted: "won't" },
-  { expanded: "would not", contracted: "wouldn't" },
-  { expanded: "could not", contracted: "couldn't" },
-  { expanded: "should not", contracted: "shouldn't" },
-  { expanded: "is not", contracted: "isn't" },
-  { expanded: "are not", contracted: "aren't" },
-  { expanded: "was not", contracted: "wasn't" },
-  { expanded: "were not", contracted: "weren't" },
-  { expanded: "have not", contracted: "haven't" },
-  { expanded: "has not", contracted: "hasn't" },
-  { expanded: "had not", contracted: "hadn't" },
-  { expanded: "it is", contracted: "it's" },
-  { expanded: "it has", contracted: "it's" },
-  { expanded: "that is", contracted: "that's" },
-  { expanded: "there is", contracted: "there's" },
-  { expanded: "they are", contracted: "they're" },
-  { expanded: "we are", contracted: "we're" },
-  { expanded: "you are", contracted: "you're" },
-  { expanded: "i am", contracted: "i'm" },
-  { expanded: "i will", contracted: "i'll" },
-  { expanded: "i would", contracted: "i'd" },
-  { expanded: "i have", contracted: "i've" }
-]
-
-// ── PASSIVE VOICE PATTERNS ──────────────────────────────────
-
-const PASSIVE_PATTERNS = [
-  /\b(is|are|was|were|be|been|being)\s+\w+ed\b/gi,
-  /\b(is|are|was|were)\s+\w+en\b/gi,
-  /\bhas been\s+\w+(ed|en)\b/gi,
-  /\bhave been\s+\w+(ed|en)\b/gi,
-  /\bhad been\s+\w+(ed|en)\b/gi,
-  /\bwill be\s+\w+(ed|en)\b/gi
-]
-
-// ── HEDGING PHRASES ─────────────────────────────────────────
-
-const HEDGING_PHRASES = [
-  "it is important to note that",
-  "it's important to note that",
-  "it is worth noting that",
-  "it's worth noting that",
-  "it should be noted that",
-  "one should note that",
-  "it is essential to understand",
-  "it is crucial to recognize",
-  "it is vital to",
-  "one must consider",
-  "it can be argued that",
-  "some might say that",
-  "it could be suggested",
-  "research suggests that",
-  "studies have shown that",
-  "according to research",
-  "experts believe that",
-  "it has been observed that",
-  "it is generally accepted"
-]
-
-// ── FORMALITY MARKERS ───────────────────────────────────────
-
-const FORMAL_MARKERS = [
-  "therefore", "subsequently", "consequently", "thus", "hence",
-  "whereby", "wherein", "herein", "thereof", "hitherto",
-  "heretofore", "aforementioned", "notwithstanding", "inasmuch"
-]
-
-const INFORMAL_MARKERS = [
-  "pretty", "kind of", "sort of", "basically", "literally",
-  "actually", "honestly", "tbh", "you know", "stuff",
-  "things", "a lot", "tons of", "way more", "way less"
-]
-
-
-// ============================================================
-// STEP 1: TEXT PREPROCESSING
-// ============================================================
-
-function preprocessText(text) {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || []
-  const words = text.toLowerCase().match(/\b\w+\b/g) || []
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0)
-  const totalWords = words.length
-  const totalSentences = sentences.length
-
-  return { sentences, words, paragraphs, totalWords, totalSentences }
+// ── MODULE 3: Sentence Length Uniformity ──
+function m3_rhythm(p){
+  if(p.sc<3)return{score:0,flagged:[],detail:'Too few sentences'}
+  const L=p.sentLens,mean=L.reduce((a,b)=>a+b,0)/L.length
+  const std=Math.sqrt(L.reduce((a,v)=>a+Math.pow(v-mean,2),0)/L.length)
+  const clusters=[];let cur=[0]
+  for(let i=1;i<L.length;i++){if(Math.abs(L[i]-L[i-1])<=4)cur.push(i);else{if(cur.length>=3)clusters.push([...cur]);cur=[i]}}
+  if(cur.length>=3)clusters.push(cur)
+  const flagged=[];clusters.forEach(c=>c.forEach(i=>flagged.push({text:p.sentences[i],type:'rhythm',reason:`Uniform length cluster (σ=${std.toFixed(1)})`})))
+  const s1=std<5?0.6:std<8?0.3:0,s2=clusters.length*0.16
+  return{score:clamp(s1+s2),flagged,detail:`σ=${std.toFixed(1)}, ${clusters.length} clusters`}
 }
 
-
-// ============================================================
-// MODULE 1: AI Vocabulary Fingerprint Scanner
-// ============================================================
-
-function detectAIVocab(text) {
-  const lower = text.toLowerCase()
-  const flagged = []
-  let score = 0
-
-  // Scan critical words
-  AI_VOCAB.critical.forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi')
-    const matches = [...text.matchAll(regex)]
-    matches.forEach(m => {
-      score += 2
-      flagged.push({
-        text: m[0],
-        index: m.index,
-        type: 'vocab',
-        detail: `AI fingerprint word: "${word}"`
-      })
-    })
-  })
-
-  // Scan phrases
-  AI_VOCAB.phrases.forEach(phrase => {
-    let idx = lower.indexOf(phrase)
-    while (idx !== -1) {
-      score += 3
-      flagged.push({
-        text: text.substring(idx, idx + phrase.length),
-        index: idx,
-        type: 'vocab',
-        detail: `AI fingerprint phrase: "${phrase}"`
-      })
-      idx = lower.indexOf(phrase, idx + 1)
-    }
-  })
-
-  return { flagged, score, count: flagged.length }
+// ── MODULE 4: Contraction Absence ──
+function m4_contractions(p){
+  let missed=0;const flagged=[]
+  CONTRACTION_PAIRS.forEach(({e,c})=>{const rx=new RegExp(`\\b${e}\\b`,'gi');[...p.text.matchAll(rx)].forEach(m=>{missed++;flagged.push({text:m[0],idx:m.index,type:'formal',reason:`"${e}" → "${c}"`})})})
+  return{score:clamp(missed*0.08),flagged,detail:`${missed} missed contractions`}
 }
 
-
-// ============================================================
-// MODULE 2: Transition Word Overuse Detector
-// ============================================================
-
-function detectTransitions(sentences) {
-  let count = 0
-  const flagged = []
-
-  sentences.forEach(sentence => {
-    const lower = sentence.toLowerCase().trim()
-    for (const category in TRANSITIONS) {
-      TRANSITIONS[category].forEach(transition => {
-        if (lower.startsWith(transition) || lower.includes(`, ${transition}`)) {
-          count++
-          flagged.push({
-            text: sentence.trim(),
-            type: 'transition',
-            detail: `Transition overuse: "${transition}"`
-          })
-        }
-      })
-    }
-  })
-
-  const ratio = sentences.length > 0 ? count / sentences.length : 0
-  return {
-    count,
-    flagged,
-    score: ratio > 0.15 ? ratio * 40 : ratio * 20
-  }
+// ── MODULE 5: Passive Voice Clustering ──
+function m5_passive(p){
+  let pc=0;const flagged=[]
+  p.sentences.forEach(s=>{let hit=false;PASSIVE_RE.forEach(rx=>{rx.lastIndex=0;if(rx.test(s))hit=true});if(hit){pc++;flagged.push({text:s,type:'formal',reason:'Passive voice'})}})
+  const ratio=p.sc>0?pc/p.sc:0
+  return{score:clamp(ratio>0.25?(ratio-0.25)*1.2:0),flagged,detail:`${pc}/${p.sc} passive sentences`}
 }
 
-
-// ============================================================
-// MODULE 3: Sentence Length Uniformity Detector
-// ============================================================
-
-function detectRhythmUniformity(sentences) {
-  if (sentences.length < 3) return { stdDev: 99, clusters: [], score: 0, flagged: [] }
-
-  const lengths = sentences.map(s => s.trim().split(/\s+/).length)
-
-  // Standard deviation
-  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length
-  const variance = lengths.reduce((acc, len) => acc + Math.pow(len - mean, 2), 0) / lengths.length
-  const stdDev = Math.sqrt(variance)
-
-  // Find clusters of similar-length sentences (3+ in a row within 4 words)
-  const clusters = []
-  let currentCluster = [0]
-
-  for (let i = 1; i < lengths.length; i++) {
-    if (Math.abs(lengths[i] - lengths[i - 1]) <= 4) {
-      currentCluster.push(i)
-    } else {
-      if (currentCluster.length >= 3) clusters.push([...currentCluster])
-      currentCluster = [i]
-    }
-  }
-  if (currentCluster.length >= 3) clusters.push([...currentCluster])
-
-  const uniformityScore = stdDev < 5 ? 30 : stdDev < 8 ? 15 : 0
-  const clusterScore = clusters.length * 8
-
-  const flagged = []
-  clusters.forEach(cluster => {
-    cluster.forEach(i => {
-      flagged.push({
-        text: sentences[i].trim(),
-        type: 'rhythm',
-        detail: `Uniform sentence length pattern (stdDev: ${stdDev.toFixed(1)})`
-      })
-    })
-  })
-
-  return {
-    stdDev,
-    clusters: clusters.map(c => c.map(i => sentences[i])),
-    score: uniformityScore + clusterScore,
-    flagged
-  }
+// ── MODULE 6: Paragraph Symmetry ──
+function m6_parasym(p){
+  if(p.paragraphs.length<3)return{score:0,flagged:[],detail:'<3 paragraphs'}
+  const lens=p.paragraphs.map(x=>x.split(/\s+/).length),mean=lens.reduce((a,b)=>a+b,0)/lens.length
+  const std=Math.sqrt(lens.reduce((a,v)=>a+Math.pow(v-mean,2),0)/lens.length)
+  return{score:p.paragraphs.length>3&&std<20?0.3:0,flagged:[],detail:`Para σ=${std.toFixed(1)}`}
 }
 
-
-// ============================================================
-// MODULE 4: Contraction Absence Detector
-// ============================================================
-
-function detectContractionAbsence(text) {
-  let opportunitiesMissed = 0
-  const flaggedSpans = []
-
-  CONTRACTION_PAIRS.forEach(pair => {
-    const regex = new RegExp(`\\b${pair.expanded}\\b`, 'gi')
-    const matches = [...text.matchAll(regex)]
-    opportunitiesMissed += matches.length
-    matches.forEach(m => {
-      flaggedSpans.push({
-        text: m[0],
-        index: m.index,
-        type: 'formal',
-        detail: `"${pair.expanded}" → should be "${pair.contracted}"`
-      })
-    })
-  })
-
-  return {
-    opportunitiesMissed,
-    flaggedSpans,
-    flagged: flaggedSpans,
-    score: Math.min(opportunitiesMissed * 2, 25)
-  }
+// ── MODULE 7: Hedging Phrases ──
+function m7_hedging(p){
+  const flagged=[]
+  HEDGING.forEach(ph=>{let i=p.lc.indexOf(ph);while(i!==-1){flagged.push({text:p.text.substring(i,i+ph.length),idx:i,type:'transition',reason:`Hedging: "${ph}"`});i=p.lc.indexOf(ph,i+1)}})
+  return{score:clamp(flagged.length*0.08),flagged,detail:`${flagged.length} hedging phrases`}
 }
 
-
-// ============================================================
-// MODULE 5: Passive Voice Clustering Detector
-// ============================================================
-
-function detectPassiveVoice(sentences) {
-  let passiveCount = 0
-  const flagged = []
-
-  sentences.forEach(sentence => {
-    let isPassive = false
-    PASSIVE_PATTERNS.forEach(pattern => {
-      // Reset lastIndex for global regex
-      pattern.lastIndex = 0
-      if (pattern.test(sentence)) isPassive = true
-    })
-    if (isPassive) {
-      passiveCount++
-      flagged.push({
-        text: sentence.trim(),
-        type: 'formal',
-        detail: 'Passive voice construction'
-      })
-    }
-  })
-
-  const ratio = sentences.length > 0 ? passiveCount / sentences.length : 0
-  return {
-    passiveCount,
-    flagged,
-    score: ratio > 0.25 ? (ratio - 0.25) * 60 : 0
-  }
+// ── MODULE 8: Punctuation Patterns ──
+function m8_punctuation(p){
+  const em=(p.text.match(/—/g)||[]).length,semi=(p.text.match(/;/g)||[]).length
+  const emR=p.wc>0?em/(p.wc/100):0;let s=0;const flagged=[]
+  if(emR>1.5){s+=0.2;let i=p.text.indexOf('—');while(i!==-1){flagged.push({text:p.text.substring(Math.max(0,i-15),Math.min(p.text.length,i+15)),idx:i,type:'vocab',reason:'Em dash overuse'});i=p.text.indexOf('—',i+1)}}
+  if(p.sc>0&&semi/p.sc>0.2)s+=0.16
+  if(!/  /.test(p.text)&&p.wc>100)s+=0.05
+  return{score:clamp(s),flagged,detail:`${em} em dashes, ${semi} semicolons`}
 }
 
-
-// ============================================================
-// MODULE 6: Paragraph Symmetry Detector
-// ============================================================
-
-function detectParagraphSymmetry(paragraphs) {
-  if (paragraphs.length < 2) return { score: 0, flagged: [], stdDev: 99 }
-
-  const lengths = paragraphs.map(p => p.trim().split(/\s+/).length)
-  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length
-  const variance = lengths.reduce((acc, l) => acc + Math.pow(l - mean, 2), 0) / lengths.length
-  const stdDev = Math.sqrt(variance)
-
-  const score = (paragraphs.length > 3 && stdDev < 20) ? 15 : 0
-
-  return { stdDev, score, paragraphs: lengths, flagged: [] }
+// ── MODULE 9: Repetitive Openers ──
+function m9_openers(p){
+  const ops=p.sentences.map(s=>s.trim().split(/\s+/).slice(0,2).join(' ').toLowerCase())
+  const counts={};ops.forEach(o=>{counts[o]=(counts[o]||0)+1})
+  let s=0;const flagged=[]
+  Object.entries(counts).forEach(([op,c])=>{if(c>=3){s+=c*0.06;p.sentences.forEach(sent=>{if(sent.trim().toLowerCase().startsWith(op))flagged.push({text:sent,type:'rhythm',reason:`Opener "${op}" ×${c}`})})}})
+  return{score:clamp(s),flagged,detail:`${Object.keys(counts).filter(k=>counts[k]>=3).length} repeated openers`}
 }
 
-
-// ============================================================
-// MODULE 7: Hedging Phrase Detector
-// ============================================================
-
-function detectHedging(text) {
-  const lower = text.toLowerCase()
-  const flagged = []
-
-  HEDGING_PHRASES.forEach(phrase => {
-    let idx = lower.indexOf(phrase)
-    while (idx !== -1) {
-      flagged.push({
-        text: text.substring(idx, idx + phrase.length),
-        index: idx,
-        type: 'transition',
-        detail: `Hedging filler: "${phrase}"`
-      })
-      idx = lower.indexOf(phrase, idx + 1)
-    }
-  })
-
-  return { flagged, score: flagged.length * 4 }
+// ── MODULE 10: Formality Consistency ──
+function m10_formality(p){
+  let fc=0,ic=0
+  FORMAL_MARKERS.forEach(m=>{if(p.lc.includes(m))fc++})
+  INFORMAL_MARKERS.forEach(m=>{if(p.lc.includes(m))ic++})
+  const pure=fc>3&&ic===0
+  return{score:pure?0.24:0,flagged:[],detail:pure?'Zero register variation':'Normal variation'}
 }
 
+// ── MODULE 11: Information Density Oscillation ──
+function m11_infodensity(p){
+  if(p.sc<4)return{score:0,flagged:[],detail:'Too few sentences'}
+  const densities=p.sentWords.map(ws=>{let content=0;ws.forEach(w=>{if(!FUNCTION_WORDS.has(w.toLowerCase()))content++});return ws.length>0?content/ws.length:0})
+  const mean=densities.reduce((a,b)=>a+b,0)/densities.length
+  const variance=densities.reduce((a,v)=>a+Math.pow(v-mean,2),0)/densities.length
+  return{score:clamp(Math.max(0,(0.3-variance)*0.8)),flagged:[],detail:`Density variance: ${variance.toFixed(3)}`}
+}
 
-// ============================================================
-// MODULE 8: Punctuation Pattern Detector
-// ============================================================
+// ── MODULE 12: Semantic Progression Predictability ──
+function m12_semantic(p){
+  if(p.sc<5)return{score:0,flagged:[],detail:'Too few sentences'}
+  const sets=p.sentWords.map(ws=>new Set(ws.map(w=>w.toLowerCase()).filter(w=>!FUNCTION_WORDS.has(w)&&w.length>2)))
+  let totalSim=0,comparisons=0
+  for(let i=0;i<sets.length-1;i++){for(let d=1;d<=Math.min(3,sets.length-1-i);d++){const a=sets[i],b=sets[i+d];if(a.size&&b.size){const inter=new Set([...a].filter(x=>b.has(x)));const union=new Set([...a,...b]);totalSim+=inter.size/union.size;comparisons++}}}
+  const avg=comparisons>0?totalSim/comparisons:0
+  return{score:clamp(avg>0.4?(avg-0.4)*1.0:0),flagged:[],detail:`Avg Jaccard: ${avg.toFixed(3)}`}
+}
 
-function detectPunctuationPatterns(text, sentences) {
-  const emDashes = (text.match(/—/g) || []).length
-  const semicolons = (text.match(/;/g) || []).length
+// ── MODULE 13: Local Redundancy Echoes ──
+function m13_redundancy(p){
+  if(p.sc<5)return{score:0,flagged:[],detail:'Too few sentences'}
+  let echoes=0;const window=5
+  for(let i=0;i<p.sc-1;i++){const end=Math.min(i+window,p.sc)
+    const baseWords=new Set(p.sentWords[i].map(w=>w.toLowerCase()).filter(w=>!FUNCTION_WORDS.has(w)&&w.length>3))
+    for(let j=i+1;j<end;j++){const cmpWords=p.sentWords[j].map(w=>w.toLowerCase()).filter(w=>!FUNCTION_WORDS.has(w)&&w.length>3)
+      let clusterOverlap=0;cmpWords.forEach(w=>{if(baseWords.has(w)){clusterOverlap++}else{SYNONYM_CLUSTERS.forEach(cl=>{if(cl.includes(w)&&[...baseWords].some(bw=>cl.includes(bw)))clusterOverlap++})}})
+      if(cmpWords.length>0&&clusterOverlap/cmpWords.length>0.5)echoes++}}
+  return{score:clamp(echoes*0.04),flagged:[],detail:`${echoes} redundancy echoes`}
+}
 
-  const wordCount = text.split(/\s+/).length
-  const emDashRatio = wordCount > 0 ? emDashes / (wordCount / 100) : 0
+// ── MODULE 14: Clause Architecture Repetition ──
+function m14_clause(p){
+  if(p.sc<5)return{score:0,flagged:[],detail:'Too few sentences'}
+  const patterns=p.sentences.map(s=>{const t=s.trim();if(/^[^,]+,\s*(but|and|so|yet|while|although)\s/i.test(t))return'A'
+    if(/[:;]/.test(t))return'B';if(/\b(because|since|as)\s/i.test(t))return'C';return'X'})
+  const counts={};patterns.forEach(pa=>{if(pa!=='X')counts[pa]=(counts[pa]||0)+1})
+  const maxRatio=p.sc>0?Math.max(...Object.values(counts).concat(0))/p.sc:0
+  return{score:clamp(maxRatio>0.4?(maxRatio-0.4)*0.6:0),flagged:[],detail:`Max clause pattern: ${(maxRatio*100).toFixed(0)}%`}
+}
 
-  const flagged = []
-  let score = 0
+// ── MODULE 15: Function Word Entropy ──
+function m15_entropy(p){
+  if(p.wc<50)return{score:0,flagged:[],detail:'Too short'}
+  const fw=["the","and","but","if","because","while","however","although","that","which"]
+  const counts={};let total=0
+  fw.forEach(w=>{const c=(p.lc.match(new RegExp(`\\b${w}\\b`,'g'))||[]).length;counts[w]=c;total+=c})
+  if(total===0)return{score:0.2,flagged:[],detail:'No function words'}
+  let H=0;fw.forEach(w=>{const pr=counts[w]/total;if(pr>0)H-=pr*Math.log2(pr)})
+  return{score:clamp(Math.abs(H-3.0)*0.4),flagged:[],detail:`Entropy: ${H.toFixed(2)} (baseline ~3.0)`}
+}
 
-  if (emDashRatio > 1.5) {
-    score += 10
-    let idx = text.indexOf('—')
-    while (idx !== -1) {
-      const start = Math.max(0, idx - 20)
-      const end = Math.min(text.length, idx + 20)
-      flagged.push({
-        text: text.substring(start, end).trim(),
-        index: idx,
-        type: 'vocab',
-        detail: 'Em dash overuse'
-      })
-      idx = text.indexOf('—', idx + 1)
-    }
+// ── MODULE 16: Context Window Memory Leak ──
+function m16_memoryleak(p){
+  if(p.wc<100)return{score:0,flagged:[],detail:'Too short'}
+  const trigrams=new Map()
+  for(let i=0;i<p.words.length-2;i++){const tri=p.words.slice(i,i+3).join(' ')
+    if(!FUNCTION_WORDS.has(p.words[i])&&!FUNCTION_WORDS.has(p.words[i+2])){if(!trigrams.has(tri))trigrams.set(tri,[]);trigrams.get(tri).push(i)}}
+  let leaks=0;trigrams.forEach((positions)=>{if(positions.length>=2){for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++){if(Math.abs(positions[a]-positions[b])>30)leaks++}}})
+  return{score:clamp(leaks*0.1),flagged:[],detail:`${leaks} memory leak echoes`}
+}
+
+// ── MODULE 17: Lexical Burstiness ──
+function m17_burstiness(p){
+  if(p.sc<5)return{score:0,flagged:[],detail:'Too few sentences'}
+  const L=p.sentLens,mean=L.reduce((a,b)=>a+b,0)/L.length
+  const variance=L.reduce((a,v)=>a+Math.pow(v-mean,2),0)/L.length
+  const B=(variance-mean)/(variance+mean+0.001)
+  const m4=L.reduce((a,v)=>a+Math.pow(v-mean,4),0)/L.length
+  const kurtosis=m4/(Math.pow(variance,2)+0.001)-3
+  let s=0;if(B<0.2)s+=0.15;if(kurtosis<1)s+=0.2
+  return{score:clamp(s),flagged:[],detail:`Burstiness: ${B.toFixed(2)}, Kurtosis: ${kurtosis.toFixed(2)}`}
+}
+
+// ── MODULE 18: Narrative Commitment ──
+function m18_narrative(p){
+  if(p.wc<100)return{score:0,flagged:[],detail:'Too short'}
+  let concrete=0
+  const markers=[/\blast (week|month|year|time|night|summer)\b/gi,/\byesterday\b/gi,/\bthis (morning|afternoon|evening)\b/gi,/\bin (19|20)\d{2}\b/g,/\bthat (morning|night|day|afternoon)\b/gi,/\bI remember\b/gi,/\bwe (went|saw|tried|found|built)\b/gi]
+  markers.forEach(rx=>{const m=p.text.match(rx);if(m)concrete+=m.length})
+  const pnRegex=/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/g;const pns=p.text.match(pnRegex)||[]
+  concrete+=Math.min(pns.length*0.3,5)
+  const density=concrete/Math.max(p.wc/100,1)
+  return{score:clamp(density<0.5?0.24:0),flagged:[],detail:`Concrete density: ${density.toFixed(2)}/100w`}
+}
+
+// ── MODULE 19: Revision Artifact Absence ──
+function m19_revision(p){
+  if(p.wc<300)return{score:0,flagged:[],detail:'Too short for revision check'}
+  let found=0;REVISION_MARKERS.forEach(m=>{if(p.lc.includes(m))found++})
+  return{score:found===0?0.2:0,flagged:[],detail:found===0?'No self-correction markers':`${found} revision markers found`}
+}
+
+// ── MODULE 20: Emotional Temperature Flatness ──
+function m20_emotion(p){
+  if(p.sc<5)return{score:0,flagged:[],detail:'Too few sentences'}
+  const scores=p.sentWords.map(ws=>{let s=0;ws.forEach(w=>{const l=w.toLowerCase();if(POS_WORDS.has(l))s++;if(NEG_WORDS.has(l))s--});return ws.length>0?s/ws.length:0})
+  const mean=scores.reduce((a,b)=>a+b,0)/scores.length
+  const variance=scores.reduce((a,v)=>a+Math.pow(v-mean,2),0)/scores.length
+  return{score:clamp(variance<0.01?0.3:variance<0.03?0.15:0),flagged:[],detail:`Sentiment variance: ${variance.toFixed(4)}`}
+}
+
+// ── MODULE 21: Syntactic Complexity vs Lexical Density ──
+function m21_syntactic(p){
+  if(p.sc<3)return{score:0,flagged:[],detail:'Too few sentences'}
+  let contentCount=0;p.words.forEach(w=>{if(!FUNCTION_WORDS.has(w))contentCount++})
+  const ratio=p.wc>0?contentCount/p.wc:0
+  const avgLen=p.sentLens.length>0?p.sentLens.reduce((a,b)=>a+b,0)/p.sentLens.length:0
+  return{score:ratio>0.65&&avgLen<12?0.4:0,flagged:[],detail:`Content ratio: ${ratio.toFixed(2)}, avg len: ${avgLen.toFixed(1)}`}
+}
+
+// ── MODULE 22: Pragmatic Marker Absence ──
+function m22_pragmatic(p){
+  if(p.wc<200)return{score:0,flagged:[],detail:'Too short'}
+  let found=0;PRAGMATIC_MARKERS.forEach(m=>{if(p.lc.includes(m))found++})
+  return{score:found===0?0.16:0,flagged:[],detail:found===0?'No discourse markers':`${found} pragmatic markers`}
+}
+
+// ── MODULE 23: Idiom Density ──
+function m23_idioms(p){
+  if(p.wc<400)return{score:0,flagged:[],detail:'Too short for idiom check'}
+  let found=0;IDIOMS.forEach(id=>{if(p.lc.includes(id))found++})
+  return{score:found===0?0.2:0,flagged:[],detail:found===0?'Zero idioms':`${found} idioms found`}
+}
+
+// ── MODULE 24: Temporal Anchoring Absence ──
+function m24_temporal(p){
+  if(p.wc<200)return{score:0,flagged:[],detail:'Too short'}
+  let found=0;TEMPORAL_MARKERS.forEach(m=>{if(p.lc.includes(m))found++})
+  return{score:found===0?0.16:0,flagged:[],detail:found===0?'No temporal anchors':`${found} time references`}
+}
+
+// ── MODULE 25: Collocation Naturalness ──
+function m25_collocations(p){
+  const flagged=[];let raw=0
+  Object.keys(UNNATURAL_COLLOCATIONS).forEach(uc=>{let i=p.lc.indexOf(uc);while(i!==-1){raw+=3;flagged.push({text:p.text.substring(i,i+uc.length),idx:i,type:'vocab',reason:`Unnatural: "${uc}" → "${UNNATURAL_COLLOCATIONS[uc]}"`});i=p.lc.indexOf(uc,i+1)}})
+  return{score:clamp(raw*0.06),flagged,detail:`${flagged.length} unnatural collocations`}
+}
+
+// ── SUBSCORE WEIGHTS ──
+const WEIGHTS={structuralPredictability:0.18,semanticSmoothness:0.16,informationDensityStability:0.14,syntacticRepetition:0.12,emotionalFlatness:0.10,concreteExperienceScarcity:0.10,lexicalBurstiness:0.10,revisionArtifactAbsence:0.10}
+
+// ── HIGH-CONFIDENCE FLAGGING (3+ signals agree) ──
+function flagHighConf(allFlagged,sentences){
+  const hc=[];sentences.forEach(s=>{const t=s.trim();const types=new Set()
+    allFlagged.forEach(f=>{if(t.includes(f.text)||f.text.includes(t))types.add(f.type)})
+    if(types.size>=3)hc.push({text:t,type:'highConfidence',reason:`${types.size} independent AI signals`})})
+  return hc
+}
+
+// ── MASTER DETECTION ──
+export function runDetection(text){
+  if(!text||text.trim().length===0)return{score:0,verdict:'No text to analyze',spans:[],summary:{transition_count:0,rhythm_count:0,vocab_count:0,formal_count:0,high_confidence_count:0},subscores:{}}
+  const p=preprocess(text)
+  if(p.wc<20)return{score:0,verdict:'Text too short for accurate analysis',spans:[],summary:{transition_count:0,rhythm_count:0,vocab_count:0,formal_count:0,high_confidence_count:0},subscores:{}}
+
+  // Run all 25 modules
+  const r={m1:m1_vocab(p),m2:m2_transitions(p),m3:m3_rhythm(p),m4:m4_contractions(p),m5:m5_passive(p),m6:m6_parasym(p),m7:m7_hedging(p),m8:m8_punctuation(p),m9:m9_openers(p),m10:m10_formality(p),m11:m11_infodensity(p),m12:m12_semantic(p),m13:m13_redundancy(p),m14:m14_clause(p),m15:m15_entropy(p),m16:m16_memoryleak(p),m17:m17_burstiness(p),m18:m18_narrative(p),m19:m19_revision(p),m20:m20_emotion(p),m21:m21_syntactic(p),m22:m22_pragmatic(p),m23:m23_idioms(p),m24:m24_temporal(p),m25:m25_collocations(p)}
+
+  // Compute 8 subscores
+  const sub={
+    structuralPredictability:clamp((r.m3.score+r.m6.score+r.m14.score)/3*1.5),
+    semanticSmoothness:clamp((r.m12.score+r.m13.score+r.m16.score)/3*1.5),
+    informationDensityStability:clamp((r.m11.score+r.m21.score)/2*1.5),
+    syntacticRepetition:clamp((r.m9.score+r.m15.score)/2*1.5),
+    emotionalFlatness:r.m20.score,
+    concreteExperienceScarcity:clamp((r.m18.score+r.m24.score)/2*1.5),
+    lexicalBurstiness:r.m17.score,
+    revisionArtifactAbsence:clamp((r.m19.score+r.m22.score)/2*1.5)
   }
 
-  if (sentences.length > 0 && semicolons / sentences.length > 0.2) {
-    score += 8
+  // Surface-level signals (vocab, transitions, contractions etc) add bonus
+  const surfaceScore=(r.m1.score+r.m2.score+r.m4.score+r.m5.score+r.m7.score+r.m8.score+r.m10.score+r.m23.score+r.m25.score)/9
+
+  // Weighted ensemble
+  let ensemble=0
+  for(const k in WEIGHTS)ensemble+=sub[k]*WEIGHTS[k]
+  // Blend: 60% deep subscores + 40% surface signals
+  const blended=ensemble*0.6+surfaceScore*0.4
+  const finalScore=Math.min(Math.round(blended*120),100)
+
+  // Verdicts
+  let verdict,color
+  if(finalScore<20){verdict='Likely Human Written';color='#22c55e'}
+  else if(finalScore<40){verdict='Mostly Human with AI Touches';color='#84cc16'}
+  else if(finalScore<60){verdict='Mixed — AI Assisted';color='#eab308'}
+  else if(finalScore<80){verdict='Likely AI Generated';color='#f97316'}
+  else{verdict='Almost Certainly AI Generated';color='#ef4444'}
+
+  // Collect flagged spans
+  const allFlagged=[...r.m1.flagged,...r.m2.flagged,...r.m3.flagged,...r.m4.flagged,...r.m5.flagged,...r.m7.flagged,...r.m8.flagged,...r.m9.flagged,...r.m25.flagged]
+  const hc=flagHighConf(allFlagged,p.sentences)
+  const allSpans=[...hc,...allFlagged]
+  // Deduplicate
+  const seen=new Set(),spans=[]
+  allSpans.forEach(s=>{const k=s.text.trim();if(!seen.has(k)){seen.add(k);spans.push({text:s.text,category:s.type,reason:s.reason})}})
+
+  const summary={
+    transition_count:r.m2.flagged.length+r.m7.flagged.length,
+    rhythm_count:r.m3.flagged.length+r.m9.flagged.length,
+    vocab_count:r.m1.flagged.length+r.m25.flagged.length,
+    formal_count:r.m4.flagged.length+r.m5.flagged.length,
+    high_confidence_count:hc.length
   }
 
-  return { emDashes, semicolons, score, flagged }
+  return{score:finalScore,verdict,color,spans,summary,subscores:sub}
 }
-
-
-// ============================================================
-// MODULE 9: Repetitive Sentence Opener Detector
-// ============================================================
-
-function detectRepetitiveOpeners(sentences) {
-  const openers = sentences.map(s => {
-    const words = s.trim().split(/\s+/)
-    return words.slice(0, 2).join(' ').toLowerCase()
-  })
-
-  const openerCounts = {}
-  openers.forEach(o => { openerCounts[o] = (openerCounts[o] || 0) + 1 })
-
-  const flagged = []
-  let score = 0
-
-  Object.entries(openerCounts).forEach(([opener, count]) => {
-    if (count >= 3) {
-      score += count * 3
-      sentences.forEach(s => {
-        if (s.trim().toLowerCase().startsWith(opener)) {
-          flagged.push({
-            text: s.trim(),
-            type: 'rhythm',
-            detail: `Opener "${opener}" repeated ${count} times`
-          })
-        }
-      })
-    }
-  })
-
-  return { openerCounts, score, flagged }
-}
-
-
-// ============================================================
-// MODULE 10: Formality Consistency Detector
-// ============================================================
-
-function detectFormalityConsistency(text) {
-  const lower = text.toLowerCase()
-  let formalCount = 0
-  let informalCount = 0
-
-  FORMAL_MARKERS.forEach(m => { if (lower.includes(m)) formalCount++ })
-  INFORMAL_MARKERS.forEach(m => { if (lower.includes(m)) informalCount++ })
-
-  const purelyFormal = formalCount > 3 && informalCount === 0
-
-  return {
-    formalCount,
-    informalCount,
-    score: purelyFormal ? 12 : 0,
-    flagged: [],
-    detail: purelyFormal
-      ? 'Zero register variation — consistent AI formality'
-      : 'Normal register variation'
-  }
-}
-
-
-// ============================================================
-// FINAL SCORE CALCULATOR
-// ============================================================
-
-function calculateFinalScore(moduleResults) {
-  const rawScore = Object.values(moduleResults).reduce(
-    (sum, m) => sum + (m.score || 0), 0
-  )
-
-  const normalized = Math.min(Math.round(rawScore * 1.8), 100)
-
-  let verdict, color
-  if (normalized < 20) {
-    verdict = 'Likely Human Written'
-    color = '#22c55e'
-  } else if (normalized < 40) {
-    verdict = 'Mostly Human with AI Touches'
-    color = '#84cc16'
-  } else if (normalized < 60) {
-    verdict = 'Mixed — AI Assisted'
-    color = '#eab308'
-  } else if (normalized < 80) {
-    verdict = 'Likely AI Generated'
-    color = '#f97316'
-  } else {
-    verdict = 'Almost Certainly AI Generated'
-    color = '#ef4444'
-  }
-
-  return { score: normalized, verdict, color }
-}
-
-
-// ============================================================
-// HIGH-CONFIDENCE FLAGGING
-// Sentences with 3+ signals from any category → high-confidence
-// ============================================================
-
-function flagHighConfidence(allFlagged, sentences) {
-  const sentenceSignals = {}
-
-  // Count signals per sentence text
-  allFlagged.forEach(f => {
-    const key = f.text.trim()
-    if (!sentenceSignals[key]) sentenceSignals[key] = new Set()
-    sentenceSignals[key].add(f.type)
-  })
-
-  const highConfidence = []
-  // Also count by checking which flagged items fall within which sentence
-  sentences.forEach(sentence => {
-    const trimmed = sentence.trim()
-    let signalCount = 0
-    const signalTypes = new Set()
-
-    allFlagged.forEach(f => {
-      if (trimmed.includes(f.text) || f.text.includes(trimmed)) {
-        signalCount++
-        signalTypes.add(f.type)
-      }
-    })
-
-    if (signalCount >= 3 || signalTypes.size >= 3) {
-      highConfidence.push({
-        text: trimmed,
-        type: 'high-confidence',
-        detail: `${signalCount} AI signals detected (${[...signalTypes].join(', ')})`
-      })
-    }
-  })
-
-  return highConfidence
-}
-
-
-// ============================================================
-// MASTER DETECTION FUNCTION
-// ============================================================
-
-export function runDetection(text) {
-  if (!text || text.trim().length === 0) {
-    return {
-      score: 0,
-      verdict: 'No text to analyze',
-      spans: [],
-      summary: {
-        transition_count: 0,
-        rhythm_count: 0,
-        vocab_count: 0,
-        formal_count: 0,
-        high_confidence_count: 0
-      }
-    }
-  }
-
-  const { sentences, paragraphs } = preprocessText(text)
-
-  // Run all 10 modules
-  const vocabResult = detectAIVocab(text)
-  const transitionResult = detectTransitions(sentences)
-  const rhythmResult = detectRhythmUniformity(sentences)
-  const contractionResult = detectContractionAbsence(text)
-  const passiveResult = detectPassiveVoice(sentences)
-  const paragraphResult = detectParagraphSymmetry(paragraphs)
-  const hedgingResult = detectHedging(text)
-  const punctuationResult = detectPunctuationPatterns(text, sentences)
-  const openerResult = detectRepetitiveOpeners(sentences)
-  const formalityResult = detectFormalityConsistency(text)
-
-  // Combine all module scores
-  const moduleResults = {
-    vocab: vocabResult,
-    transition: transitionResult,
-    rhythm: rhythmResult,
-    contraction: contractionResult,
-    passive: passiveResult,
-    paragraph: paragraphResult,
-    hedging: hedgingResult,
-    punctuation: punctuationResult,
-    opener: openerResult,
-    formality: formalityResult
-  }
-
-  // Calculate final score
-  const { score, verdict } = calculateFinalScore(moduleResults)
-
-  // Collect all flagged spans
-  const allFlagged = [
-    ...vocabResult.flagged,
-    ...transitionResult.flagged,
-    ...rhythmResult.flagged,
-    ...(contractionResult.flagged || contractionResult.flaggedSpans),
-    ...passiveResult.flagged,
-    ...hedgingResult.flagged,
-    ...punctuationResult.flagged,
-    ...openerResult.flagged
-  ]
-
-  // Flag high-confidence sentences
-  const highConfidence = flagHighConfidence(allFlagged, sentences)
-
-  // Merge all spans, deduplicate by text
-  const allSpans = [...allFlagged, ...highConfidence]
-  const seenTexts = new Set()
-  const dedupedSpans = []
-
-  // Prefer high-confidence over other types
-  const sortedSpans = allSpans.sort((a, b) => {
-    if (a.type === 'high-confidence' && b.type !== 'high-confidence') return -1
-    if (b.type === 'high-confidence' && a.type !== 'high-confidence') return 1
-    return 0
-  })
-
-  sortedSpans.forEach(span => {
-    const key = span.text.trim()
-    if (!seenTexts.has(key)) {
-      seenTexts.add(key)
-      dedupedSpans.push({
-        text: span.text,
-        category: span.type,
-        reason: span.detail
-      })
-    }
-  })
-
-  // Build summary counts
-  const summary = {
-    transition_count: transitionResult.count + hedgingResult.flagged.length,
-    rhythm_count: rhythmResult.flagged.length + openerResult.flagged.length,
-    vocab_count: vocabResult.count,
-    formal_count: (contractionResult.flagged || contractionResult.flaggedSpans).length + passiveResult.passiveCount,
-    high_confidence_count: highConfidence.length
-  }
-
-  return { score, verdict, spans: dedupedSpans, summary }
-}
-
-// Export constants for the humanizer to reuse
-export { AI_VOCAB, TRANSITIONS, CONTRACTION_PAIRS, HEDGING_PHRASES }

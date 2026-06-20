@@ -21,6 +21,7 @@
   --text-muted: #52525b;
   --green: #22c55e;
   --yellow: #eab308;
+  --orange: #f97316;
   --red: #ef4444;
   --radius: 12px;
   --radius-sm: 8px;
@@ -502,6 +503,7 @@ body {
 
 .score-value.green { color: var(--green); }
 .score-value.yellow { color: var(--yellow); }
+.score-value.orange { color: var(--orange); }
 .score-value.red { color: var(--red); }
 
 .score-verdict {
@@ -528,6 +530,7 @@ body {
 
 .score-bar-fill.green { background: var(--green); }
 .score-bar-fill.yellow { background: var(--yellow); }
+.score-bar-fill.orange { background: var(--orange); }
 .score-bar-fill.red { background: var(--red); }
 
 /* ============== DETECTION SUMMARY ============== */
