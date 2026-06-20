@@ -140,27 +140,44 @@ export default function App(){
     if(btn&&sl){sl.style.left=btn.offsetLeft+'px';sl.style.width=btn.offsetWidth+'px'}
   },[mode])
 
-  const handleHumanize=useCallback(()=>{
-    if(!inputText.trim()||overLimit)return
+  const handleHumanize=useCallback((overrideText = null)=>{
+    const txt = typeof overrideText === 'string' ? overrideText : inputText;
+    if(!txt.trim()||countWords(txt)>MAX_WORDS)return
     setLoading(true);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0)
     setTimeout(()=>{try{
-      const{result,note,warning}=runHumanizer(inputText,style,difficulty)
+      const{result,note,warning}=runHumanizer(txt,style,difficulty)
       setHumanizedText(result)
       setOutputWords(countWords(result))
       if(warning)setHumanizeNote({type:'warning',text:warning})
       else if(note)setHumanizeNote({type:'note',text:note})
     }catch(e){setError(e.message)}finally{setLoading(false)}},0)
-  },[inputText,style,difficulty,overLimit])
+  },[inputText,style,difficulty])
 
-  const handleDetect=useCallback(()=>{
-    if(!inputText.trim()||overLimit)return
+  const handleDetect=useCallback((overrideText = null)=>{
+    const txt = typeof overrideText === 'string' ? overrideText : inputText;
+    if(!txt.trim()||countWords(txt)>MAX_WORDS)return
     setLoading(true);setError(null);setDetectResult(null)
     setTimeout(()=>{try{
-      const result=runDetection(inputText)
-      const highlightedHtml=highlightSpans(inputText,result.spans)
+      const result=runDetection(txt)
+      const highlightedHtml=highlightSpans(txt,result.spans)
       setDetectResult({...result,highlightedHtml})
     }catch(e){setError(e.message)}finally{setLoading(false)}},0)
-  },[inputText,overLimit])
+  },[inputText])
+
+  const handleHumanizeAgain = () => {
+    if(!outputRef.current)return;
+    const t = outputRef.current.innerText;
+    setInputText(t);
+    handleHumanize(t);
+  };
+
+  const handleDetectThis = () => {
+    if(!outputRef.current)return;
+    const t = outputRef.current.innerText;
+    setInputText(t);
+    setMode('detect');
+    handleDetect(t);
+  };
 
   const handleCopy=()=>{
     let t='';if(mode==='humanize')t=humanizedText
@@ -263,6 +280,10 @@ export default function App(){
                  onKeyUp={updateFormatState} onMouseUp={updateFormatState}
                  dangerouslySetInnerHTML={{__html:escHtml(humanizedText).replace(/\n\n/g,'<br><br>')}} />
             <div className="output-hint">Click to edit</div>
+            <div className="action-row">
+              <button className="action-btn" onClick={handleHumanizeAgain}>↻ Humanize Again</button>
+              <button className="action-btn" onClick={handleDetectThis}>⊙ Detect This</button>
+            </div>
           </>:!loading&&!error&&<div className="output-placeholder"><Sparkles size={48}/>
             <p>Paste AI-generated text on the left,<br/>choose your style &amp; difficulty,<br/>then click <strong>Humanize</strong>.</p></div>)}
 

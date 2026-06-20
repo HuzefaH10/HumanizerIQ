@@ -472,6 +472,30 @@ body {
   user-select: none;
 }
 
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.action-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #9090aa;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.action-btn:hover {
+  color: #ffffff;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
 /* Rich Text Formatting Styles */
 .output-text ul { list-style: disc; padding-left: 20px; margin: 8px 0; }
 .output-text ol { list-style: decimal; padding-left: 20px; margin: 8px 0; }
