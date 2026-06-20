@@ -266,39 +266,6 @@ export function runDetection(text){
   // Run all 25 modules
   const r={m1:m1_vocab(p),m2:m2_transitions(p),m3:m3_rhythm(p),m4:m4_contractions(p),m5:m5_passive(p),m6:m6_parasym(p),m7:m7_hedging(p),m8:m8_punctuation(p),m9:m9_openers(p),m10:m10_formality(p),m11:m11_infodensity(p),m12:m12_semantic(p),m13:m13_redundancy(p),m14:m14_clause(p),m15:m15_entropy(p),m16:m16_memoryleak(p),m17:m17_burstiness(p),m18:m18_narrative(p),m19:m19_revision(p),m20:m20_emotion(p),m21:m21_syntactic(p),m22:m22_pragmatic(p),m23:m23_idioms(p),m24:m24_temporal(p),m25:m25_collocations(p)}
 
-  // Compute 8 subscores
-  const sub={
-    structuralPredictability:clamp((r.m3.score+r.m6.score+r.m14.score)/3*1.5),
-    semanticSmoothness:clamp((r.m12.score+r.m13.score+r.m16.score)/3*1.5),
-    informationDensityStability:clamp((r.m11.score+r.m21.score)/2*1.5),
-    syntacticRepetition:clamp((r.m9.score+r.m15.score)/2*1.5),
-    emotionalFlatness:r.m20.score,
-    concreteExperienceScarcity:clamp((r.m18.score+r.m24.score)/2*1.5),
-    lexicalBurstiness:r.m17.score,
-    revisionArtifactAbsence:clamp((r.m19.score+r.m22.score)/2*1.5)
-  }
-
-  // Surface-level signals (vocab, transitions, contractions etc) add bonus
-  const surfaceScore=(r.m1.score+r.m2.score+r.m4.score+r.m5.score+r.m7.score+r.m8.score+r.m10.score+r.m23.score+r.m25.score)/9
-
-  // Weighted ensemble
-  let ensemble=0
-  for(const k in WEIGHTS)ensemble+=sub[k]*WEIGHTS[k]
-  // Blend: 60% deep subscores + 40% surface signals
-  const blended=ensemble*0.6+surfaceScore*0.4
-  let finalScore=Math.min(Math.round(blended*120),100)
-  
-  const vocabHits = r.m1.flagged.length;
-  if(vocabHits >= 3) finalScore = Math.max(finalScore, 35);
-
-  // Verdicts
-  let verdict,color
-  if(finalScore<20){verdict='Likely Human Written';color='#22c55e'}
-  else if(finalScore<40){verdict='Mostly Human with AI Touches';color='#84cc16'}
-  else if(finalScore<60){verdict='Mixed — AI Assisted';color='#eab308'}
-  else if(finalScore<80){verdict='Likely AI Generated';color='#f97316'}
-  else{verdict='Almost Certainly AI Generated';color='#ef4444'}
-
   // Collect flagged spans
   const allFlagged=[...r.m1.flagged,...r.m2.flagged,...r.m3.flagged,...r.m4.flagged,...r.m5.flagged,...r.m7.flagged,...r.m8.flagged,...r.m9.flagged,...r.m25.flagged]
   const hc=flagHighConf(allFlagged,p.sentences)
@@ -314,6 +281,29 @@ export function runDetection(text){
     formal_count:r.m4.flagged.length+r.m5.flagged.length,
     high_confidence_count:hc.length
   }
+
+  // Compute 8 subscores
+  const sub={
+    structuralPredictability:clamp((r.m3.score+r.m6.score+r.m14.score)/3*1.5),
+    semanticSmoothness:clamp((r.m12.score+r.m13.score+r.m16.score)/3*1.5),
+    informationDensityStability:clamp((r.m11.score+r.m21.score)/2*1.5),
+    syntacticRepetition:clamp((r.m9.score+r.m15.score)/2*1.5),
+    emotionalFlatness:r.m20.score,
+    concreteExperienceScarcity:clamp((r.m18.score+r.m24.score)/2*1.5),
+    lexicalBurstiness:r.m17.score,
+    revisionArtifactAbsence:clamp((r.m19.score+r.m22.score)/2*1.5)
+  }
+
+  const rawScore = (summary.vocab_count * 2.5) + (summary.transition_count * 3) + (summary.rhythm_count * 4) + (summary.formal_count * 2) + (summary.high_confidence_count * 5)
+  const finalScore = Math.min(Math.round(rawScore), 100)
+
+  // Verdicts
+  let verdict,color
+  if(finalScore<20){verdict='Likely Human Written';color='#22c55e'}
+  else if(finalScore<40){verdict='Mostly Human with AI Touches';color='#84cc16'}
+  else if(finalScore<60){verdict='Mixed — AI Assisted';color='#eab308'}
+  else if(finalScore<80){verdict='Likely AI Generated';color='#f97316'}
+  else{verdict='Almost Certainly AI Generated';color='#ef4444'}
 
   return{score:finalScore,verdict,color,spans,summary,subscores:sub}
 }
