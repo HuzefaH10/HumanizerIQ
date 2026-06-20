@@ -13,7 +13,7 @@ function extractProtected(text){
   pats.forEach(p=>{c=c.replace(p,m=>{const ph=`⟦P${zones.length}⟧`;zones.push(m);return ph})})
   return{cleaned:c,zones}
 }
-function restoreProtected(text,zones){let r=text;zones.forEach((o,i)=>{r=r.replace(`⟦P${i}⟧`,o)});return r}
+function restoreProtected(text,zones){let r=text;zones.forEach((o,i)=>{r=r.replace(new RegExp(`⟦P${i}⟧`,'gi'),o)});return r}
 
 // ── T1: Vocabulary Replacement (all) ──
 function t1_vocab(text){
@@ -200,7 +200,7 @@ function t18_asymmetric(paragraphs){
   // Compress ~20% (remove last sentence)
   const compressCount=Math.max(1,Math.floor(r.length*0.2))
   for(let n=0;n<compressCount;n++){const i=Math.floor(Math.random()*r.length)
-    const sents=r[i].match(/[^.!?]+[.!?]+/g);if(sents&&sents.length>2)r[i]=sents.slice(0,-1).join(' ')}
+    const sents=r[i].match(/[^.!?]+[.!?]+|[^.!?]+$/g);if(sents&&sents.length>2)r[i]=sents.slice(0,-1).join(' ')}
   return r
 }
 
@@ -264,7 +264,7 @@ function processChunk(text,style,difficulty){
 
   // Medium + Hard transforms
   if(isMedium||isHard){
-    let sents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
     sents=t4_sentencevar(sents)         // T4
     sents=t5_fragments(sents)           // T5
     sents=t6_dysfluency(sents)          // T6
@@ -277,7 +277,7 @@ function processChunk(text,style,difficulty){
     // Paragraph rebalancing
     const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
     if(paras.length>2){const rebal=[];for(let i=0;i<paras.length;i++){const p=paras[i].trim();if(!p)continue
-      const ps=p.match(/[^.!?]+[.!?]+/g)||[p]
+      const ps=p.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[p]
       if(ps.length>5&&chance(0.5)){const sp=Math.floor(ps.length*(0.3+Math.random()*0.4));rebal.push(ps.slice(0,sp).join(' '));rebal.push(ps.slice(sp).join(' '))}
       else if(ps.length<=2&&i+1<paras.length&&chance(0.5)){rebal.push(p+' '+paras[i+1].trim());i++}
       else rebal.push(p)}
@@ -286,13 +286,13 @@ function processChunk(text,style,difficulty){
 
   // Hard-only transforms
   if(isHard){
-    let sents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
     sents=t9_memanchors(sents)          // T9
     sents=t12_uncertainty(sents)        // T12
     sents=t16_redundancy(sents)         // T16
     r=sents.join(' ')
     // T10: Micro-digression
-    const dsents=r.match(/[^.!?]+[.!?]+/g)||[r]
+    const dsents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
     r=t10_digression(dsents).join(' ')
     // T11: Incomplete enumeration
     r=t11_enumeration(r)
