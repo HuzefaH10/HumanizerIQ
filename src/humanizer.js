@@ -325,6 +325,91 @@ function t21_skeletonBreaker(sentences, difficulty) {
   })
 }
 
+// ── T22: Semantic Distance Amplifier (all) ──
+const SEMANTIC_DISTANCE_MAP = {
+  "organizations must leverage technology":
+    "technology has become non-negotiable for organizations",
+  "enables teams to streamline their workflows":
+    "cuts down on the back-and-forth that slows teams down",
+  "paramount importance of patient-centered care":
+    "keeping patients at the center of everything",
+  "comprehensive implementation":
+    "rolling this out properly across the board",
+  "careful consideration of ethical frameworks":
+    "thinking seriously about the ethics involved",
+  "robust communication frameworks":
+    "solid ways to keep communication from breaking down",
+  "enhance the overall quality of life":
+    "actually improve how people live day to day",
+  "making more informed and accurate decisions":
+    "getting the call right more often",
+  "unprecedented efficiency":
+    "speeds and accuracy we haven't seen before",
+  "cutting-edge solutions":
+    "tools that are genuinely ahead of where most people are",
+  "a comprehensive understanding of":
+    "a real grasp on",
+  "plays a crucial role in":
+    "matters a lot when it comes to",
+  "in today's rapidly evolving":
+    "with how fast things are changing in",
+  "it is important to note that":
+    "one thing worth pointing out is that",
+  "it is worth noting that":
+    "something worth calling out is that",
+  "in order to achieve":
+    "if the goal is",
+  "take into account":
+    "factor in",
+  "a wide range of":
+    "all kinds of",
+  "has the potential to":
+    "could realistically",
+  "on the other hand":
+    "then again",
+  "as a result of this":
+    "because of that",
+  "in the context of":
+    "when you think about",
+  "it is essential to":
+    "you really need to",
+  "significant impact on":
+    "real effect on",
+  "the vast majority of":
+    "most",
+  "at the end of the day":
+    "when it all comes together",
+  "drive meaningful change":
+    "actually move the needle",
+  "foster a culture of":
+    "build a real habit of",
+  "navigate the complexities of":
+    "deal with the messiness of",
+  "remains a significant challenge":
+    "is still genuinely hard",
+  "harness the power of":
+    "put to good use",
+  "a holistic approach to":
+    "looking at the full picture of"
+}
+
+function t22_semanticDistance(text) {
+  let result = text
+  const sorted = Object.entries(SEMANTIC_DISTANCE_MAP).sort((a,b) => b[0].length - a[0].length)
+  sorted.forEach(([original, replacement]) => {
+    const pattern = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    result = result.replace(pattern, (m) => {
+      if (Math.random() < 0.7) {
+        // Preserve original capitalization
+        if (m[0] === m[0].toUpperCase()) return replacement[0].toUpperCase() + replacement.slice(1)
+        return replacement
+      }
+      return m
+    })
+  })
+  return result
+}
+
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
@@ -385,6 +470,9 @@ function processChunk(text,style,difficulty,docState){
   const isAcademic=style==='Academic',isProfessional=style==='Professional',isCasual=style==='Casual'
   const{cleaned,zones}=extractProtected(text)
   let r=cleaned
+
+  // ── ALL COMBOS: Semantic distance amplification (runs first to catch original AI phrasing) ──
+  r=t22_semanticDistance(r)
 
   // ── ALL COMBOS: Vocab replacement (style-aware) ──
   r=t1_vocab(r,style)
