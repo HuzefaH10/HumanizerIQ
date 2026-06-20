@@ -308,13 +308,11 @@ export default function App(){
 
     <main className="app-main">
       <div className="panel">
-        <div className="panel-header"><div className="panel-title"><Type size={14}/>Input Text</div></div>
+        <div className="panel-header"><div className="panel-title"><Type size={14}/>Input Text <span className={`word-badge ${words>=MAX_WORDS?'red':words>2000?'amber':''}`}>{words.toLocaleString()} / {MAX_WORDS.toLocaleString()}</span></div></div>
         <div className="textarea-wrapper">
           <textarea className="text-input" placeholder={mode==='humanize'?'Paste your AI-generated text here...':'Paste any text to analyze for AI patterns...'}
             value={inputText} onChange={e=>setInputText(e.target.value)} spellCheck={false}/>
-          <div className="textarea-footer">
-            <span className={`word-count ${overLimit?'over':words>MAX_WORDS*0.9?'warning':''}`}>
-              {words.toLocaleString()} / {MAX_WORDS.toLocaleString()} words</span>
+          <div className="textarea-footer" style={{justifyContent: 'flex-end'}}>
             {inputText&&<button className="clear-btn" onClick={()=>{setInputText('');setError(null);setHumanizedText('');setHumanizeNote(null);setDetectResult(null)}}>
               <Trash2 size={12}/>Clear</button>}
           </div>
@@ -329,11 +327,11 @@ export default function App(){
         </>}
         {mode==='humanize'?
           <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleHumanize(null)}>
-            {loading?<RefreshCw size={18} className="spin-icon"/>:<Sparkles size={18}/>}
+            <Sparkles size={18} className={loading?'spin-icon':''}/>
             {loading?(loadingType==='humanize'?humanizeMsgs[loadingMsgIdx]:'Humanizing...'):'Humanize'}
           </button>:
           <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleDetect(null)}>
-            {loading?<RefreshCw size={18} className="spin-icon"/>:<ScanSearch size={18}/>}
+            <ScanSearch size={18} className={loading?'spin-icon':''}/>
             {loading?(loadingType==='detect'?detectMsgs[loadingMsgIdx]:'Analyzing...'):'Analyze'}
           </button>}
       </div>
@@ -350,7 +348,7 @@ export default function App(){
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {mode==='humanize' && (
               <div className="history-wrapper" style={{ position: 'relative' }}>
-                <button className="copy-output-btn" onClick={() => setShowHistory(!showHistory)}>
+                <button className={`copy-output-btn history-btn ${history.length>0?'has-history':''}`} onClick={() => setShowHistory(!showHistory)}>
                   <Clock size={14}/>History ({history.length})
                 </button>
                 {showHistory && (
@@ -435,8 +433,20 @@ export default function App(){
               <button className="action-btn" onClick={handleHumanizeAgain}>↻ Humanize Again</button>
               <button className="action-btn" onClick={handleDetectThis}>⊙ Detect This</button>
             </div>
-          </>:!loading&&!error&&<div className="output-placeholder"><Sparkles size={48}/>
-            <p>Paste AI-generated text on the left,<br/>choose your style &amp; difficulty,<br/>then click <strong>Humanize</strong>.</p></div>)}
+          </>:!loading&&!error&&<div className="output-placeholder">
+            <svg width="64" height="64" viewBox="0 0 20 20" fill="none" style={{marginBottom:'16px'}}>
+              <rect x="3" y="3" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="12" y="3" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="3" y="12" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="12" y="12" width="5" height="5" rx="1.5" fill="#6366f1"/>
+            </svg>
+            <div className="empty-state-text">Your humanized text will appear here</div>
+            <div className="empty-state-pills">
+              <span className="empty-state-pill">✓ Pattern Detection</span>
+              <span className="empty-state-pill">✓ Style Modes</span>
+              <span className="empty-state-pill">✓ Difficulty Control</span>
+            </div>
+          </div>)}
 
           {mode==='detect'&&(detectResult?<div className="detection-result">
             <div className="score-display">
@@ -462,8 +472,20 @@ export default function App(){
             {detectResult.sentenceHtml&&detectView==='sentence'&&<div className="output-text" dangerouslySetInnerHTML={{__html:detectResult.sentenceHtml.replace(/\n\n/g,'<br><br>')}}/>}
             {detectView==='category'&&<div className="legend">{LEGEND_ITEMS.filter(item=>activeCategories.has(item.key)).map(item=>
               <span key={item.key} className="legend-pill"><span className="legend-dot" style={{background:item.color}}/>{item.label}</span>)}</div>}
-          </div>:!loading&&!error&&<div className="output-placeholder"><ScanSearch size={48}/>
-            <p>Paste any text on the left,<br/>then click <strong>Analyze</strong> to detect<br/>AI-generated patterns.</p></div>)}
+          </div>:!loading&&!error&&<div className="output-placeholder">
+            <svg width="64" height="64" viewBox="0 0 20 20" fill="none" style={{marginBottom:'16px'}}>
+              <rect x="3" y="3" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="12" y="3" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="3" y="12" width="5" height="5" rx="1.5" fill="#6366f1"/>
+              <rect x="12" y="12" width="5" height="5" rx="1.5" fill="#6366f1"/>
+            </svg>
+            <div className="empty-state-text">Your detection results will appear here</div>
+            <div className="empty-state-pills">
+              <span className="empty-state-pill">✓ Pattern Detection</span>
+              <span className="empty-state-pill">✓ Style Modes</span>
+              <span className="empty-state-pill">✓ Difficulty Control</span>
+            </div>
+          </div>)}
 
           {loading&&<div className="output-placeholder"><span className="spinner" style={{width:32,height:32,borderWidth:3}}/>
             <p>{mode==='humanize'?'Rewriting your text...':'Analyzing 25 pattern modules...'}</p></div>}
