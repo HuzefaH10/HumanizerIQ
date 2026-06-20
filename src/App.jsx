@@ -63,6 +63,7 @@ export default function App(){
   const[humanizeNote,setHumanizeNote]=useState(null)
   const[detectResult,setDetectResult]=useState(null)
   const[copied,setCopied]=useState(false)
+  const[outputWords,setOutputWords]=useState(0)
   
   const[formatState,setFormatState]=useState({
     bold:false,italic:false,underline:false,strikeThrough:false,
@@ -72,6 +73,10 @@ export default function App(){
   const humanizeBtnRef=useRef(null),detectBtnRef=useRef(null),sliderRef=useRef(null),outputRef=useRef(null)
   const words=countWords(inputText),overLimit=words>MAX_WORDS
   const animatedScore=useAnimatedCounter(detectResult?.score||0)
+
+  const handleOutputInput=useCallback(()=>{
+    if(outputRef.current) setOutputWords(countWords(outputRef.current.innerText))
+  },[])
 
   const updateFormatState=useCallback(()=>{
     setFormatState({
@@ -137,10 +142,11 @@ export default function App(){
 
   const handleHumanize=useCallback(()=>{
     if(!inputText.trim()||overLimit)return
-    setLoading(true);setError(null);setHumanizedText('');setHumanizeNote(null)
+    setLoading(true);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0)
     setTimeout(()=>{try{
       const{result,note,warning}=runHumanizer(inputText,style,difficulty)
       setHumanizedText(result)
+      setOutputWords(countWords(result))
       if(warning)setHumanizeNote({type:'warning',text:warning})
       else if(note)setHumanizeNote({type:'note',text:note})
     }catch(e){setError(e.message)}finally{setLoading(false)}},0)
@@ -243,8 +249,17 @@ export default function App(){
               <button className="rtf-btn text-btn" onClick={handleCopyPlain}>{copied?'Copied!':'Copy Plain'}</button>
               <button className="rtf-btn text-btn" onClick={handleCopyFormatted}>{copied?'Copied!':'Copy Formatted'}</button>
             </div>
+            <div className="output-status-bar">
+              <span className={`word-count ${outputWords > 0 && Math.abs(outputWords - words) / (words || 1) > 0.2 ? 'warning' : outputWords > 0 && Math.abs(outputWords - words) / (words || 1) <= 0.1 ? 'success' : ''}`}>
+                {outputWords.toLocaleString()} / {words.toLocaleString()} words
+              </span>
+              <button className="clear-btn" onClick={() => { if(outputRef.current) outputRef.current.innerHTML=''; setHumanizedText(''); setOutputWords(0); setHumanizeNote(null); }}>
+                <Trash2 size={12}/>Clear
+              </button>
+            </div>
             {humanizeNote&&<div className={humanizeNote.type==='warning'?'warning-banner':'info-banner'}><Info size={16}/>{humanizeNote.text}</div>}
             <div ref={outputRef} className="output-text" contentEditable={true} suppressContentEditableWarning={true}
+                 onInput={handleOutputInput}
                  onKeyUp={updateFormatState} onMouseUp={updateFormatState}
                  dangerouslySetInnerHTML={{__html:escHtml(humanizedText).replace(/\n\n/g,'<br><br>')}} />
             <div className="output-hint">Click to edit</div>

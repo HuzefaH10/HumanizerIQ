@@ -267,8 +267,20 @@ body {
   color: var(--yellow);
 }
 
+.word-count.success {
+  color: var(--green);
+}
+
 .word-count.over {
   color: var(--red);
+}
+
+.output-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 0 4px;
 }
 
 .clear-btn {
