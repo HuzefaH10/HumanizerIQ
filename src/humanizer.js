@@ -3,34 +3,53 @@ import { runDetection } from './detector'
 function countWords(text){return text.trim().split(/\s+/).filter(w=>w.length>0).length}
 
 function buildPrompt(text, style, difficulty) {
-  const isAcademic = style === 'Academic';
-  const isCasual = style === 'Casual';
-  const isProfessional = style === 'Professional';
+  const toneGuide = style === 'Casual'
+    ? 'Use a conversational, casual tone throughout. Use contractions freely (don\'t, isn\'t, won\'t). Write like you\'re explaining this to a friend.'
+    : style === 'Academic'
+    ? 'Keep the tone informed and knowledgeable, like a grad student writing a well-researched blog post — not a formal essay.'
+    : 'Keep the tone professional but approachable, like a senior employee writing an internal memo — not a textbook.';
 
   let prompt = '';
 
-  if (isAcademic || isProfessional) {
-    if (difficulty === 'Easy') {
-      prompt = "Lightly rewrite this text to sound more natural while keeping formal tone. Fix obvious AI patterns but keep structure mostly intact. Return only the rewritten text, nothing else.";
-    } else if (difficulty === 'Medium') {
-      prompt = "Rewrite this text to sound like a knowledgeable human wrote it. Vary sentence lengths, remove AI transition words, keep it professional. Return only the rewritten text, nothing else.";
-    } else {
-      prompt = "Completely rewrite this to bypass AI detectors. Mix short and long sentences, use natural human rhythm, occasional informal phrases, reorder information, zero AI transition words like Furthermore/Additionally/Moreover. Must read as 100% human. Return only the rewritten text, nothing else.";
-    }
-  } else if (isCasual) {
-    if (difficulty === 'Easy') {
-      prompt = "Lightly rewrite this text to sound more natural and conversational. Fix obvious AI patterns but keep structure mostly intact. Return only the rewritten text, nothing else.";
-    } else if (difficulty === 'Medium') {
-      prompt = "Rewrite this text to sound like a real person wrote it casually. Use contractions, conversational tone, vary sentence lengths, remove AI transition words. Return only the rewritten text, nothing else.";
-    } else {
-      prompt = "Completely rewrite this to bypass AI detectors. Use a highly conversational tone, contractions, personal opinions, short reaction sentences, and natural human rhythm. Reorder information and use zero AI transition words. Must read as 100% human. Return only the rewritten text, nothing else.";
-    }
+  if (difficulty === 'Hard') {
+    prompt = `Rewrite the following text so it completely bypasses AI detectors like GPTZero. You must:
+- Use irregular sentence lengths — mix very short sentences (4-6 words) with longer ones
+- Add one personal opinion or reaction per paragraph (e.g. "which is wild when you think about it", "and that's the part most people miss")
+- Remove ALL of these words and phrases completely: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial, significant, notably, comprehensive, facilitate, leverage, utilize, robust, paradigm, streamline, enhance
+- Start some sentences with "And" or "But"
+- Add a minor imperfection or casual aside once per paragraph
+- Do NOT use parallel sentence structures — vary how each sentence begins
+- Do NOT sound like a formal essay
+- ${toneGuide}
+- Return only the rewritten text, no explanation
+
+Text:
+${text}`;
+  } else if (difficulty === 'Medium') {
+    prompt = `Rewrite the following text to sound like a real human wrote it, not AI. You must:
+- Use irregular sentence lengths — mix short and long sentences naturally
+- Add one brief personal reaction or opinion per paragraph
+- Remove ALL of these words and phrases: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial, notable, comprehensive, facilitate, leverage, utilize, robust, paradigm
+- Start some sentences with "And" or "But"
+- Do NOT use parallel sentence structures — vary how each sentence begins
+- ${toneGuide}
+- Return only the rewritten text, no explanation
+
+Text:
+${text}`;
   } else {
-    // Default fallback
-    prompt = "Rewrite this text to sound human. Return only the rewritten text, nothing else.";
+    prompt = `Lightly rewrite the following text to fix the most obvious AI patterns. You must:
+- Remove these AI transition words if present: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial
+- Slightly vary sentence lengths where they feel too uniform
+- Keep the original structure and meaning mostly intact
+- ${toneGuide}
+- Return only the rewritten text, no explanation
+
+Text:
+${text}`;
   }
 
-  return `${prompt}\n\nHere is the text to rewrite:\n${text}`;
+  return prompt;
 }
 
 export async function runHumanizer(text, style = 'Professional', difficulty = 'Medium') {
