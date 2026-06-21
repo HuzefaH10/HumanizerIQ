@@ -215,6 +215,7 @@ export default function App(){
         setLoading(false); setLoadingType(null);
       }, 200)
     }catch(e){
+      console.error("Caught error in handleHumanize:", e);
       setProgress(100);
       setError("Something went wrong, try again");
       setLoading(false);
