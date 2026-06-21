@@ -110,8 +110,11 @@ function t_quirks(sentences, style, isHard, docState){
       }
     }
 
-    // Fragments: never Academic, Professional/Casual hard only (1 per 400w, 1 per doc max)
-    if(isHard && !isAcademic && fragWc>=400 && totalWordCount>=400 && !docState.fragUsed){
+    // Fragments: never Academic, Professional/Casual hard only
+    // Unthrottled in hard mode — insert every 150w instead of once per doc
+    if(isHard && !isAcademic && fragWc>=150){
+      if(chance(0.5)){r.splice(i+1,0,' '+pick(FRAGS, docState));fragWc=0;i++;continue}
+    } else if(isHard && !isAcademic && fragWc>=400 && totalWordCount>=400 && !docState.fragUsed){
       if(chance(0.5)){r.splice(i+1,0,' '+pick(FRAGS, docState));docState.fragUsed=true;fragWc=0;i++;continue}
     }
 
@@ -638,28 +641,165 @@ function processChunk(text,style,difficulty,docState){
       r=rebal.join('\n\n')}
   }
 
-  // ── HARD ONLY ──
+  // ── HARD ONLY: Complete structural rebuild ──
   if(isHard){
-    let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
 
-    // Academic Hard: only parentheticals (1 per 400w) + mild uncertainty ("this may suggest")
+    // ── H1: Aggressive Sentence Splitting ──
+    // Split any sentence >25 words at conjunction/comma points
+    let sents=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
+    const splitResult=[]
+    for(const s of sents){
+      const wc=countWords(s)
+      if(wc>25){
+        // Find split points: commas before conjunctions, semicolons, long comma clauses
+        const splitPts=[
+          /,\s*(and|but|so|yet|while|because|since|although|whereas|however)\s/i,
+          /;\s*/,
+          /,\s*(?=\w+\s+\w+\s+\w+\s+\w+)/  // comma followed by 4+ words
+        ]
+        let didSplit=false
+        for(const p of splitPts){
+          const m=s.match(p)
+          if(m){
+            const idx=s.indexOf(m[0])
+            if(idx>12&&idx<s.length-12){
+              let p1=s.substring(0,idx).trim()
+              if(!/[.!?]$/.test(p1))p1+='.'
+              let p2=s.substring(idx+m[0].length).trim()
+              const conj=m[1]?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
+              p2=conj+(p2[0]||'').toUpperCase()+p2.slice(1)
+              splitResult.push(p1,p2)
+              didSplit=true;break
+            }
+          }
+        }
+        if(!didSplit)splitResult.push(s)
+      } else if(wc<7&&splitResult.length>0&&countWords(splitResult[splitResult.length-1])<8&&chance(0.35)){
+        // Merge two consecutive short sentences
+        const prev=splitResult.pop().replace(/[.!?]+$/,'').trim()
+        splitResult.push(prev+' — '+s.trim()[0].toLowerCase()+s.trim().slice(1))
+      } else {
+        splitResult.push(s)
+      }
+    }
+    sents=splitResult
+
+    // ── H2: Burstiness Injection ──
+    // Insert a short reaction sentence (4-7 words) every 3-4 sentences
+    const BURST_REACTIONS=[
+      'That changes the whole picture.',
+      'And that matters.',
+      'Not a small thing.',
+      'This is the part people miss.',
+      'Which is harder than it sounds.',
+      'That alone is significant.',
+      'Hard to overstate that.',
+      'The data backs this up.',
+      'Nobody talks about this enough.',
+      'Easy to overlook that.',
+      'Worth repeating.',
+      'Big difference in practice.',
+      'That last part is key.',
+      'Not as obvious as it seems.',
+      'Real implications there.'
+    ]
+    const burstResult=[]
+    let sinceBurst=0
+    for(let i=0;i<sents.length;i++){
+      burstResult.push(sents[i])
+      sinceBurst++
+      const burstInterval=3+Math.floor(Math.random()*2) // every 3-4 sentences
+      if(sinceBurst>=burstInterval&&countWords(sents[i])>8&&i<sents.length-1){
+        burstResult.push(' '+pick(BURST_REACTIONS, docState))
+        sinceBurst=0
+      }
+    }
+    sents=burstResult
+
+    // ── H3: AI Transition Word Stripping ──
+    // Aggressively remove or replace dead-giveaway AI transitions
+    const AI_STRIP_MAP={
+      'Furthermore, ':['Also, ','Plus, ','And ',''],
+      'Additionally, ':['Also, ','And ','On top of that, ',''],
+      'Moreover, ':['And ','Plus, ',''],
+      'Consequently, ':['So ','Because of that, ',''],
+      'Subsequently, ':['Then ','After that, ',''],
+      'Notably, ':['','One thing — ',''],
+      'Significantly, ':['','The big thing is ',''],
+      'Importantly, ':['','Here\'s what matters — ',''],
+      'It is worth noting that ':['','Worth pointing out: ',''],
+      'It is crucial to ':['You need to ','The key thing is to ',''],
+      'It is important to ':['You need to ','','What matters is to ',''],
+      'It is essential to ':['You really need to ','',''],
+      'It should be noted that ':['','Thing is, ',''],
+      'In light of this, ':['Given that, ','So ',''],
+      'In this regard, ':['Here, ','On that, ',''],
+      'To that end, ':['So ','For that reason, ',''],
+      'In essence, ':['Basically, ','Really, ',''],
+      'By the same token, ':['Similarly, ','Same idea — ',''],
+    }
+    sents=sents.map(s=>{
+      let result=s
+      for(const[aiPhrase,replacements]of Object.entries(AI_STRIP_MAP)){
+        const rx=new RegExp(escRx(aiPhrase),'gi')
+        result=result.replace(rx,()=>{
+          const rep=replacements[Math.floor(Math.random()*replacements.length)]
+          return rep
+        })
+      }
+      return result
+    })
+
+    // ── H4: Sentence Opening Variation ──
+    // Break the "Subject + verb" pattern that AI repeats
+    const OPENER_FLIPS=[
+      // Prepend a short clause
+      s => { const w=s.trim().split(/\s+/); return 'Looking at it closely, '+w[0].toLowerCase()+' '+w.slice(1).join(' ') },
+      s => { const w=s.trim().split(/\s+/); return 'In practice, '+w[0].toLowerCase()+' '+w.slice(1).join(' ') },
+      s => { const w=s.trim().split(/\s+/); return 'Realistically, '+w[0].toLowerCase()+' '+w.slice(1).join(' ') },
+      s => { const w=s.trim().split(/\s+/); return 'From a practical standpoint, '+w[0].toLowerCase()+' '+w.slice(1).join(' ') },
+      // Fragment then continue
+      s => { const w=s.trim().split(/\s+/); if(w.length<6) return s; return 'Here\'s the thing. '+s.trim() },
+    ]
+    let lastFlipped=-3
+    sents=sents.map((s,i)=>{
+      const wc=countWords(s)
+      // Only flip sentences that start with a common subject pattern
+      if(wc>10&&i-lastFlipped>=3&&/^\s*(The|This|That|These|Those|It|They|We|He|She|A)\s/i.test(s)&&chance(0.35)){
+        lastFlipped=i
+        const flip=OPENER_FLIPS[Math.floor(Math.random()*OPENER_FLIPS.length)]
+        return flip(s)
+      }
+      return s
+    })
+
+    // ── H5: Per-Paragraph Informality Markers ──
+    // Even in Academic mode on Hard, inject one opinion-sounding phrase per paragraph
+    const INFORMALITY_MARKERS=[
+      ' — and that matters more than people realize.',
+      ' — which is harder than it sounds.',
+      ', and most people underestimate how much that changes things.',
+      '. That part rarely gets the attention it deserves.',
+      ' — no small thing, by the way.',
+      ', which makes a bigger difference than you\'d expect.',
+      '. The practical side of this is often ignored.',
+    ]
+
+    // Academic Hard: mild hedges + parentheticals
     if(isAcademic){
-      // Mild academic uncertainty (not "I think" but "this may suggest")
-      const ACAD_HEDGES=["this may suggest","it appears that","one could argue","this seems to indicate","it is plausible that"]
+      const ACAD_HEDGES=['this may suggest','it appears that','one could argue','this seems to indicate','it is plausible that']
       sents.forEach((_,i)=>{if(chance(0.10)&&countWords(sents[i])>8){
         const s=sents[i].trim();sents[i]=' '+pick(ACAD_HEDGES, docState)+' '+s[0].toLowerCase()+s.slice(1)}})
     }
 
-    // Professional Hard: uncertainty modeling + run-ons
+    // Professional Hard: uncertainty modeling
     if(isProfessional){
       sents=t12_uncertainty(sents, docState)
-      sents=t16_redundancy(sents, docState)
     }
 
-    // Casual Hard: full uncertainty + redundancy + memory anchors
+    // Casual Hard: full uncertainty + memory anchors
     if(isCasual){
       sents=t12_uncertainty(sents, docState)
-      sents=t16_redundancy(sents, docState)
     }
 
     r=sents.join(' ')
@@ -667,9 +807,22 @@ function processChunk(text,style,difficulty,docState){
     // Incomplete enumeration (Professional + Casual only)
     if(!isAcademic) r=t11_enumeration(r)
 
-    // Asymmetric detail distribution (all styles)
-    const paras=r.split(/\n\n+/).filter(p=>p.trim().length>0)
-    const reordered=t23_paragraphReorder(t18_asymmetric(paras, docState))
+    // Apply per-paragraph informality markers
+    const informalParas=r.split(/\n\n+/).filter(p=>p.trim().length>0)
+    const markedParas=informalParas.map((para,pi)=>{
+      if(pi===0) return para // skip first paragraph
+      const paraSents=para.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[para]
+      if(paraSents.length<2) return para
+      // Pick a random sentence in this paragraph (not first) to append marker
+      const targetIdx=1+Math.floor(Math.random()*(paraSents.length-1))
+      if(chance(0.5)&&countWords(paraSents[targetIdx])>8){
+        paraSents[targetIdx]=paraSents[targetIdx].replace(/\.$/,pick(INFORMALITY_MARKERS, docState))
+      }
+      return paraSents.join(' ')
+    })
+
+    // Asymmetric detail distribution + paragraph reorder
+    const reordered=t23_paragraphReorder(t18_asymmetric(markedParas, docState))
     r=reordered.join('\n\n')
 
     // Oxford comma inconsistency (Professional + Casual)
@@ -678,9 +831,9 @@ function processChunk(text,style,difficulty,docState){
     // Em dash spacing (Professional + Casual)
     if(!isAcademic) r=t20_emdash(r)
 
-    // Academic Hard: parentheticals only (1 per 400w), via inline injection
+    // Academic Hard: parentheticals (1 per 400w)
     if(isAcademic){
-      const ACAD_ASIDES=["(though this warrants further study)","(a point often overlooked)","(which merits consideration)","(notably)","(as one might expect)"]
+      const ACAD_ASIDES=['(though this warrants further study)','(a point often overlooked)','(which merits consideration)','(notably)','(as one might expect)']
       let sents2=r.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[r]
       let awc=0;let asideUsed=false
       for(let i=0;i<sents2.length;i++){
@@ -693,6 +846,17 @@ function processChunk(text,style,difficulty,docState){
         }
       }
       r=sents2.join(' ')
+    }
+
+    // Force contractions even in Academic Hard
+    if(isAcademic){
+      const ACAD_CONTRACTIONS=[['it is','it\'s'],['that is','that\'s'],['there is','there\'s'],['what is','what\'s'],['does not','doesn\'t'],['do not','don\'t'],['is not','isn\'t']]
+      ACAD_CONTRACTIONS.forEach(([exp,cont])=>{
+        if(chance(0.4)){
+          const rx=new RegExp('\\b'+escRx(exp)+'\\b','gi')
+          r=r.replace(rx,m=>m[0]===m[0].toUpperCase()?cont[0].toUpperCase()+cont.slice(1):cont)
+        }
+      })
     }
   }
 
