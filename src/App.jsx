@@ -191,15 +191,15 @@ export default function App(){
     if(btn&&sl){sl.style.left=btn.offsetLeft+'px';sl.style.width=btn.offsetWidth+'px'}
   },[mode])
 
-  const handleHumanize=useCallback((overrideText = null)=>{
+  const handleHumanize=useCallback(async (overrideText = null)=>{
     const txt = typeof overrideText === 'string' ? overrideText : inputText;
     if(!txt.trim()||countWords(txt)>MAX_WORDS)return
     setLoading(true);setLoadingType('humanize');setLoadingMsgIdx(0);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0);setProgress(0);
     setTimeout(() => setProgress(90), 50);
-    setTimeout(()=>{try{
+    try{
+      const {result,note,warning} = await runHumanizer(txt,style,difficulty)
       setProgress(100);
       setTimeout(()=>{
-        const{result,note,warning}=runHumanizer(txt,style,difficulty)
         setHumanizedText(result)
         setOutputWords(countWords(result))
         const newEntry = { id: Date.now(), timestamp: Date.now(), inputText: txt, outputText: result, style, difficulty };
@@ -212,7 +212,12 @@ export default function App(){
         else if(note)setHumanizeNote({type:'note',text:note})
         setLoading(false); setLoadingType(null);
       }, 200)
-    }catch(e){setError(e.message);setLoading(false);setLoadingType(null)}},3200)
+    }catch(e){
+      setProgress(100);
+      setError("Something went wrong, try again");
+      setLoading(false);
+      setLoadingType(null);
+    }
   },[inputText,style,difficulty])
 
   const handleDetect=useCallback((overrideText = null)=>{
@@ -326,10 +331,10 @@ export default function App(){
               <button key={d} className={`pill-tab ${difficulty===d?'active':''}`} onClick={()=>setDifficulty(d)}>{d}</button>)}</div></div>
         </>}
         {mode==='humanize'?
-          <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleHumanize(null)}>
-            <Sparkles size={18} className={loading?'spin-icon':''}/>
-            {loading?(loadingType==='humanize'?humanizeMsgs[loadingMsgIdx]:'Humanizing...'):'Humanize'}
-          </button>:
+            <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleHumanize(null)}>
+              <Sparkles size={18} className={loading?'spin-icon':''}/>
+              {loading&&loadingType==='humanize'?'Humanizing...':'Humanize'}
+            </button>:
           <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleDetect(null)}>
             <ScanSearch size={18} className={loading?'spin-icon':''}/>
             {loading?(loadingType==='detect'?detectMsgs[loadingMsgIdx]:'Analyzing...'):'Analyze'}
