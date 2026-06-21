@@ -249,7 +249,7 @@ function analogyInjection(text, config) {
     const pattern = new RegExp(`\\b${trigger}\\b`, 'gi')
     result = result.replace(pattern, (match) => {
       if (Math.random() > 0.3) return match
-      return `${match}, think of it like ${analogy}`
+      return `${match} — think of it like ${analogy} —`
     })
   })
   return result
@@ -272,7 +272,13 @@ function cognitiveEnergyDecay(sentences, config) {
 
     const decayTransforms = [
       s => s.replace(/\b(specifically|particularly|especially|notably)\s+/gi, ''),
-      s => s.length > 100 ? s.substring(0, s.lastIndexOf(' ', 80)) + ', you get the idea.' : s,
+      s => {
+        if(s.length > 120) {
+          const match = s.match(/^(.{50,100}?)(,\s|\s(?:and|but|so)\s)/i);
+          if(match) return match[1] + ', you get the idea.';
+        }
+        return s;
+      },
       s => s.replace(/\.$/, ', or something along those lines.'),
       s => s.replace(/\b(\d+(?:\.\d+)?)\s*(percent|%)/gi, 'a fair amount')
     ]

@@ -244,15 +244,20 @@ function t20_emdash(text){
 const SKELETON_FLIPS = [
   // Active → Passive restructure
   {
-    pattern: /(\w+(?:\s\w+)?)\s+(?:must|should|can)\s+(\w+)\s+(.+)/i,
-    transform: (s, subject, verb, object) =>
-      `${object} ${verb}ing is something ${subject} really need${subject.endsWith('s') ? '' : 's'} to prioritize`
+    pattern: /^([a-zA-Z\s]+?)\s+(?:must|should|can)\s+(?:([a-zA-Z]+ly)\s+)?([a-zA-Z]+)\s+(.+?)\.$/i,
+    transform: (s, subject, adv, verb, object) => {
+      const a = adv ? adv.toLowerCase() + ' ' : '';
+      let v = verb.toLowerCase();
+      if (v.endsWith('e') && !v.endsWith('ee')) v = v.slice(0, -1);
+      const ingPhrase = `${a}${v}ing ${object}`;
+      return `${ingPhrase.charAt(0).toUpperCase() + ingPhrase.slice(1)} is something ${subject.toLowerCase()} really need${subject.endsWith('s') ? '' : 's'} to prioritize.`
+    }
   },
   // Statement → Question → Answer
   {
-    pattern: /^(.+)\s+is\s+(?:crucial|important|essential|critical)\s+(?:for|to)\s+(.+)\.$/i,
+    pattern: /^([^,]+?)\s+is\s+(?:crucial|important|essential|critical)\s+(?:for|to)\s+([^,]+?)\.$/i,
     transform: (s, thing, context) =>
-      `Why does ${thing} matter for ${context}? Honestly, more than most people realize.`
+      `Why does ${thing.charAt(0).toLowerCase() + thing.slice(1)} matter for ${context}? Honestly, more than most people realize.`
   },
   // Noun-first → Verb-first
   {
@@ -336,8 +341,10 @@ const SEMANTIC_DISTANCE_MAP = {
     "cuts down on the back-and-forth that slows teams down",
   "paramount importance of patient-centered care":
     "keeping patients at the center of everything",
-  "comprehensive implementation":
+  "the comprehensive implementation":
     "rolling this out properly across the board",
+  "comprehensive implementation":
+    "a thorough rollout",
   "careful consideration of ethical frameworks":
     "thinking seriously about the ethics involved",
   "robust communication frameworks":
@@ -502,7 +509,19 @@ function t25_clauseInversion(sentences, difficulty) {
 // ── Cleanup ──
 function cleanup(text){
   let result = text.replace(/\s{2,}/g,' ').replace(/\s+([.!?,;:])/g,'$1')
-    .replace(/([.!?])([A-Z])/g,'$1 $2').replace(/\.{2,}/g,'.').replace(/,\s*,/g,',')
+  
+  // Fix stacked transitions or broken comma phrases
+  result = result.replace(/\b(And|But|So|Also|Plus),\s+(and|but|so|also|plus)\b/gi, '$1')
+  result = result.replace(/\b([Aa]nd|[Bb]ut|[Ss]o)\s*,\s+/g, '$1 ')
+  result = result.replace(/,\s*,/g, ',')
+  
+  // Clean up double spaces that might have been introduced
+  result = result.replace(/\s{2,}/g,' ')
+  
+  // Replace smart quotes if any were broken
+  result = result.replace(/[""]/g,'"')
+
+  result = result.replace(/([.!?])([A-Z])/g,'$1 $2').replace(/\.{2,}/g,'.').replace(/,\s*,/g,',')
     .replace(/([.!?])\s+([a-z])/g,(_,p,l)=>p+' '+l.toUpperCase())
     .replace(/(^|\n\n)(\s*)([a-z])/g,(_,pr,sp,l)=>pr+sp+l.toUpperCase())
     .replace(/\n{3,}/g,'\n\n').trim()
@@ -651,22 +670,21 @@ function processChunk(text,style,difficulty,docState){
     for(const s of sents){
       const wc=countWords(s)
       if(wc>25){
-        // Find split points: commas before conjunctions, semicolons, long comma clauses
+        // Find split points: commas before conjunctions, semicolons
         const splitPts=[
-          /,\s*(and|but|so|yet|while|because|since|although|whereas|however)\s/i,
-          /;\s*/,
-          /,\s*(?=\w+\s+\w+\s+\w+\s+\w+)/  // comma followed by 4+ words
+          /,\s*(and|but|so|yet|because|since|although|whereas|however)\s/i,
+          /;\s*/
         ]
         let didSplit=false
         for(const p of splitPts){
           const m=s.match(p)
           if(m){
             const idx=s.indexOf(m[0])
-            if(idx>12&&idx<s.length-12){
+            if(idx>15&&idx<s.length-15){
               let p1=s.substring(0,idx).trim()
               if(!/[.!?]$/.test(p1))p1+='.'
               let p2=s.substring(idx+m[0].length).trim()
-              const conj=m[1]?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
+              const conj=m[1]&&m[1].length>0?m[1][0].toUpperCase()+m[1].slice(1)+' ':''
               p2=conj+(p2[0]||'').toUpperCase()+p2.slice(1)
               splitResult.push(p1,p2)
               didSplit=true;break
