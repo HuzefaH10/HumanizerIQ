@@ -66,6 +66,13 @@ export async function runHumanizer(text, style = 'Professional', difficulty = 'M
     }
   );
 
+  console.log("API Response status:", response.status);
+  try {
+    console.log("API Response body:", await response.clone().json());
+  } catch (e) {
+    console.log("Failed to parse API response body:", e);
+  }
+
   if (!response.ok) {
     throw new Error("Something went wrong, try again");
   }
