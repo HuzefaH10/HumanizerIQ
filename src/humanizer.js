@@ -12,38 +12,31 @@ function buildPrompt(text, style, difficulty) {
   let prompt = '';
 
   if (difficulty === 'Hard') {
-    prompt = `Rewrite the following text so it completely bypasses AI detectors like GPTZero. You must:
-- Use irregular sentence lengths — mix very short sentences (4-6 words) with longer ones
-- Add one personal opinion or reaction per paragraph (e.g. "which is wild when you think about it", "and that's the part most people miss")
-- Remove ALL of these words and phrases completely: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial, significant, notably, comprehensive, facilitate, leverage, utilize, robust, paradigm, streamline, enhance
-- Start some sentences with "And" or "But"
-- Add a minor imperfection or casual aside once per paragraph
-- Do NOT use parallel sentence structures — vary how each sentence begins
-- Do NOT sound like a formal essay
-- ${toneGuide}
-- Return only the rewritten text, no explanation
+    prompt = `You are rewriting text to fool AI detectors like GPTZero and Copyleaks. 
 
-Text:
+Rules you MUST follow:
+- Write like a real person typing a point across, not an essay
+- Mix sentence lengths aggressively — some 4 words, some 30 words, randomly
+- Add filler reactions: "which is crazy", "and honestly", "but here's the thing", "that's the part nobody talks about"
+- Start 2-3 sentences with "And" or "But"
+- Include one slightly redundant phrase per paragraph like a human would
+- Use contractions everywhere: don't, isn't, can't, it's, they're
+- Kill these words entirely: Furthermore, Additionally, Moreover, Consequently, It is worth noting, significant, notably, crucial, paramount, imperative
+- One sentence per paragraph should feel slightly rushed or informal
+- Do NOT write clean structured prose
+- Do NOT summarize or conclude neatly
+- ${toneGuide}
+- Return only the rewritten text, nothing else
+
+Text to rewrite:
 ${text}`;
   } else if (difficulty === 'Medium') {
-    prompt = `Rewrite the following text to sound like a real human wrote it, not AI. You must:
-- Use irregular sentence lengths — mix short and long sentences naturally
-- Add one brief personal reaction or opinion per paragraph
-- Remove ALL of these words and phrases: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial, notable, comprehensive, facilitate, leverage, utilize, robust, paradigm
-- Start some sentences with "And" or "But"
-- Do NOT use parallel sentence structures — vary how each sentence begins
-- ${toneGuide}
-- Return only the rewritten text, no explanation
+    prompt = `Rewrite this to sound like a smart human wrote it casually. Vary sentence lengths, use contractions, remove formal transition words, add one casual aside per paragraph. Not too informal but definitely not AI-polished. ${toneGuide} Return only rewritten text.
 
 Text:
 ${text}`;
   } else {
-    prompt = `Lightly rewrite the following text to fix the most obvious AI patterns. You must:
-- Remove these AI transition words if present: Furthermore, Additionally, Moreover, Consequently, It is worth noting, It is crucial
-- Slightly vary sentence lengths where they feel too uniform
-- Keep the original structure and meaning mostly intact
-- ${toneGuide}
-- Return only the rewritten text, no explanation
+    prompt = `Lightly rewrite this to feel less AI-generated. Small changes only — contractions, remove one or two formal phrases, maybe split one long sentence. Keep meaning identical. ${toneGuide} Return only rewritten text.
 
 Text:
 ${text}`;
