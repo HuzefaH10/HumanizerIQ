@@ -96,6 +96,7 @@ export default function App(){
   const[showHistory,setShowHistory]=useState(false)
   const[showExport,setShowExport]=useState(false)
   const[detectView,setDetectView]=useState('category')
+  const[cooldown,setCooldown]=useState(false)
 
   const humanizeMsgs=["Analyzing patterns...","Removing AI fingerprints...","Injecting human variance...","Finalizing output..."]
   const detectMsgs=["Scanning structure...","Measuring patterns...","Calculating score..."]
@@ -193,9 +194,10 @@ export default function App(){
 
   const handleHumanize=useCallback(async (overrideText = null)=>{
     const txt = typeof overrideText === 'string' ? overrideText : inputText;
-    if(!txt.trim()||countWords(txt)>MAX_WORDS)return
-    setLoading(true);setLoadingType('humanize');setLoadingMsgIdx(0);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0);setProgress(0);
+    if(!txt.trim()||countWords(txt)>MAX_WORDS||cooldown)return
+    setLoading(true);setCooldown(true);setLoadingType('humanize');setLoadingMsgIdx(0);setError(null);setHumanizedText('');setHumanizeNote(null);setOutputWords(0);setProgress(0);
     setTimeout(() => setProgress(90), 50);
+    setTimeout(() => setCooldown(false), 5000);
     try{
       const {result,note,warning} = await runHumanizer(txt,style,difficulty)
       setProgress(100);
@@ -218,7 +220,7 @@ export default function App(){
       setLoading(false);
       setLoadingType(null);
     }
-  },[inputText,style,difficulty])
+  },[inputText,style,difficulty,cooldown])
 
   const handleDetect=useCallback((overrideText = null)=>{
     const txt = typeof overrideText === 'string' ? overrideText : inputText;
@@ -331,7 +333,7 @@ export default function App(){
               <button key={d} className={`pill-tab ${difficulty===d?'active':''}`} onClick={()=>setDifficulty(d)}>{d}</button>)}</div></div>
         </>}
         {mode==='humanize'?
-            <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading} onClick={()=>handleHumanize(null)}>
+            <button className={`cta-btn ${loading?'loading':''}`} disabled={!inputText.trim()||overLimit||loading||cooldown} onClick={()=>handleHumanize(null)}>
               <Sparkles size={18} className={loading?'spin-icon':''}/>
               {loading&&loadingType==='humanize'?'Humanizing...':'Humanize'}
             </button>:
