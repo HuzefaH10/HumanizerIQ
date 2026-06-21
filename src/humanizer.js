@@ -45,6 +45,83 @@ ${text}`;
   return prompt;
 }
 
+function postProcess(text) {
+  let processed = text;
+  
+  // 4. Contractions
+  processed = processed.replace(/\b(?:are not)\b/gi, m => m[0] === 'A' ? "Aren't" : "aren't");
+  processed = processed.replace(/\b(?:do not)\b/gi, m => m[0] === 'D' ? "Don't" : "don't");
+  processed = processed.replace(/\b(?:is not)\b/gi, m => m[0] === 'I' ? "Isn't" : "isn't");
+  
+  // 5. Remove Transitions
+  processed = processed.replace(/\b(?:Furthermore|Additionally|Moreover|Consequently)[,;]?\s*/gi, '');
+
+  const inserts = ["Worth pointing out.", "That part matters.", "Simple but true.", "And it shows.", "Most people miss this."];
+  let inserted = false;
+  let longSentenceCount = 0;
+
+  let paragraphs = processed.split(/\n\n+/);
+  paragraphs = paragraphs.map(para => {
+    // 2. Capitalize a mid-sentence word
+    let words = para.split(/\s+/);
+    if (words.length > 10) {
+      let tries = 5;
+      while(tries-- > 0) {
+        let idx = Math.floor(words.length * 0.3 + Math.random() * (words.length * 0.4));
+        if (/^[a-zA-Z]{4,}$/.test(words[idx])) {
+          words[idx] = words[idx].toUpperCase();
+          break;
+        }
+      }
+    }
+    let p = words.join(' ');
+
+    // Sentences
+    let sentences = p.match(/[^.!?]+[.!?]+/g);
+    if (!sentences) return p;
+
+    let finalSents = [];
+    for (let i = 0; i < sentences.length; i++) {
+      let s = sentences[i];
+      let wc = countWords(s);
+      
+      // 1. Split every 3rd long sentence
+      if (wc > 20) {
+        longSentenceCount++;
+        if (longSentenceCount % 3 === 0) {
+          const splitMatch = s.match(/,\s*(and|but|so|because|which|while)\s/i);
+          if (splitMatch) {
+            let p1 = s.substring(0, s.indexOf(splitMatch[0])).trim() + '.';
+            let p2 = s.substring(s.indexOf(splitMatch[0]) + splitMatch[0].length).trim();
+            p2 = p2.charAt(0).toUpperCase() + p2.slice(1);
+            finalSents.push(p1);
+            s = p2;
+          }
+        }
+      }
+      finalSents.push(s.trim());
+
+      // 3. Insert phrase
+      if (!inserted && Math.random() < 0.2 && finalSents.length >= 1) {
+        finalSents.push(inserts[Math.floor(Math.random() * inserts.length)]);
+        inserted = true;
+      }
+    }
+    return finalSents.join(' ');
+  });
+
+  processed = paragraphs.join('\n\n');
+  
+  if (!inserted) {
+    processed = processed.replace(/(.+?[.!?])\s/, `$1 ${inserts[Math.floor(Math.random() * inserts.length)]} `);
+  }
+
+  // Cleanup spaces
+  processed = processed.replace(/\s{2,}/g, ' ').replace(/\s+([.!?])/g, '$1').trim();
+  
+  return processed;
+}
+
 export async function runHumanizer(text, style = 'Professional', difficulty = 'Medium') {
   if (!text || text.trim().length === 0) return { result: '', warning: 'No text provided.' }
 
@@ -94,6 +171,9 @@ export async function runHumanizer(text, style = 'Professional', difficulty = 'M
   
   // Clean up any potential markdown formatting the model might return
   result = result.replace(/^```[\w]*\n/g, '').replace(/\n```$/g, '').trim();
+
+  // Apply post-processing rules
+  result = postProcess(result);
 
   return { 
     result, 
